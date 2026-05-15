@@ -1,0 +1,8 @@
+{
+  "name": "Copy of Audit Task Management System",
+  "description": "A high-end audit task management platform for managing templates, locations, and task execution with a sequential workflow optimization.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}

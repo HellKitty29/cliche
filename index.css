@@ -1,0 +1,96 @@
+/* Global styles */
+@import "tailwindcss";
+
+@keyframes prewp-shimmer-border {
+  0%,
+  100% {
+    border-left-color: rgba(37, 99, 181, 0.7);
+    border-top-color: rgba(191, 219, 254, 0.58);
+    border-right-color: rgba(191, 219, 254, 0.58);
+    border-bottom-color: rgba(191, 219, 254, 0.58);
+    box-shadow: 0 0 6px rgba(191, 219, 254, 0.18), inset 4px 0 0 rgba(37, 99, 181, 0.08);
+  }
+  50% {
+    border-left-color: rgba(59, 130, 246, 0.82);
+    border-top-color: rgba(125, 176, 248, 0.95);
+    border-right-color: rgba(125, 176, 248, 0.95);
+    border-bottom-color: rgba(125, 176, 248, 0.95);
+    box-shadow: 0 0 14px rgba(125, 176, 248, 0.34), inset 4px 0 0 rgba(59, 130, 246, 0.14);
+  }
+}
+
+.prewp-alert-shell {
+  border-left: 4px solid rgba(37, 99, 181, 0.7);
+  border-top: 1px solid rgba(191, 219, 254, 0.58);
+  border-right: 1px solid rgba(191, 219, 254, 0.58);
+  border-bottom: 1px solid rgba(191, 219, 254, 0.58);
+}
+
+.prewp-alert-border-shimmer {
+  animation: prewp-shimmer-border 2s infinite ease-in-out;
+}
+
+@keyframes prewp-retracted-line-shimmer {
+  0%,
+  100% {
+    background-color: rgba(37, 99, 181, 0.7);
+    box-shadow: 0 0 4px rgba(59, 130, 246, 0.12);
+  }
+  50% {
+    background-color: rgba(59, 130, 246, 0.82);
+    box-shadow: 0 0 10px rgba(59, 130, 246, 0.26);
+  }
+}
+
+.prewp-alert-retracted-line {
+  animation: prewp-retracted-line-shimmer 2s infinite ease-in-out;
+}
+
+@keyframes location-guide-breathe {
+  0%,
+  100% {
+    border-color: rgba(191, 219, 254, 0.72);
+    box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.18), 0 0 8px rgba(96, 165, 250, 0.12);
+    caret-color: rgba(30, 64, 175, 0.72);
+  }
+  50% {
+    border-color: rgba(191, 219, 254, 1);
+    box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.32), 0 0 18px rgba(96, 165, 250, 0.3);
+    caret-color: rgba(30, 64, 175, 1);
+  }
+}
+
+@keyframes location-guide-caret-breathe {
+  0%,
+  100% {
+    caret-color: rgba(30, 64, 175, 0.72);
+  }
+  50% {
+    caret-color: rgba(30, 64, 175, 1);
+  }
+}
+
+.location-guide-editor:focus-within {
+  animation: location-guide-breathe 1.15s ease-in-out infinite;
+}
+
+.location-guide-editor:focus-within p {
+  animation: location-guide-caret-breathe 1.15s ease-in-out infinite;
+}
+
+@keyframes field-settings-gear-roll {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+.field-settings-gear-roll {
+  animation: field-settings-gear-roll 0.55s ease-out;
+}
+
+.field-settings-trigger:hover .field-settings-gear {
+  animation: field-settings-gear-roll 0.55s ease-out;
+}
