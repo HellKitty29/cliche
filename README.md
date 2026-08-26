@@ -14,5 +14,5 @@
 
 ###
 **OR you can just hit this Link**
-This is a [Audit On-site Collection](https://copycat-1aj.pages.dev/ "Markdown Language").
+[Audit On-site Collection](https://copycat-1aj.pages.dev/ "Markdown Language").
 
