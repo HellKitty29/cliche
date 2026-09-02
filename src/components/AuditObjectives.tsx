@@ -1018,11 +1018,7 @@ export const AuditObjectives: React.FC<AuditObjectivesProps> = ({ onModifyProced
                       {/* 底稿进度：上传 → 检查 → 修正 → 复核 → 归档 */}
                       <td className="border-r border-slate-200 px-2.5">
                         <div
-                          className={`working-paper-progress ${
-                            getWorkingPaperStages(row, Boolean(confirmedTemplateExceptions[row.id])).every(stage => stage.state === 'done')
-                              ? 'working-paper-progress--all-done'
-                              : ''
-                          }`}
+                          className="working-paper-progress"
                           role="progressbar"
                           aria-label={`${row.procedureId}底稿进度`}
                           aria-valuemin={0}
@@ -1030,7 +1026,11 @@ export const AuditObjectives: React.FC<AuditObjectivesProps> = ({ onModifyProced
                           aria-valuenow={getWorkingPaperStages(row, Boolean(confirmedTemplateExceptions[row.id])).filter(stage => stage.state === 'done').length}
                         >
                           {getWorkingPaperStages(row, Boolean(confirmedTemplateExceptions[row.id])).map(stage => (
-                            <div key={stage.label} className="min-w-0 flex-1 text-center" title={`${stage.label}：${stage.state === 'done' ? '完成' : stage.state === 'active' ? '进行中' : stage.state === 'unavailable' ? '不适用' : '未完成'}`}>
+                            <div
+                              key={stage.label}
+                              className={`working-paper-progress__item working-paper-progress__item--${stage.state}`}
+                              title={`${stage.label}：${stage.state === 'done' ? '完成' : stage.state === 'active' ? '进行中' : stage.state === 'unavailable' ? '不适用' : '未完成'}`}
+                            >
                               <div className={`working-paper-progress__segment working-paper-progress__segment--${stage.state}`} />
                               <div className="working-paper-progress__label">{stage.label}</div>
                             </div>

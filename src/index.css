@@ -92,24 +92,42 @@
 }
 
 .working-paper-progress {
-  position: relative;
   display: flex;
   align-items: flex-start;
-  gap: 2px;
+  gap: 0;
   width: 100%;
   transform: translateY(8px);
 }
 
-.working-paper-progress--all-done::after {
+.working-paper-progress__item {
+  position: relative;
+  min-width: 0;
+  flex: 1;
+  text-align: center;
+}
+
+.working-paper-progress__item:not(:last-child)::after {
   position: absolute;
-  z-index: 2;
-  top: 2.25px;
-  right: 0;
-  left: 0;
-  height: 1.5px;
-  background: #5f833a;
+  z-index: 0;
+  top: 4px;
+  left: calc(50% + 5px);
+  width: calc(100% - 10px);
+  height: 1px;
+  background: #cbd5e1;
   content: "";
   pointer-events: none;
+}
+
+.working-paper-progress__item--done:not(:last-child)::after {
+  background: #a9c28e;
+}
+
+.working-paper-progress__item--active:not(:last-child)::after {
+  background: #c59e40;
+}
+
+.working-paper-progress__item--blocked:not(:last-child)::after {
+  background: #e4a09f;
 }
 
 @keyframes audit-metric-card-flip {
@@ -131,34 +149,44 @@
 }
 
 .working-paper-progress__segment {
-  width: 100%;
-  height: 6px;
-  background: #e2e8f0;
-}
-
-.working-paper-progress > div:first-child .working-paper-progress__segment {
-  border-radius: 9999px 0 0 9999px;
-}
-
-.working-paper-progress > div:last-child .working-paper-progress__segment {
-  border-radius: 0 9999px 9999px 0;
+  position: relative;
+  z-index: 1;
+  width: 9px;
+  height: 9px;
+  margin: 0 auto;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 9999px;
+  background: #fff;
+  box-sizing: border-box;
 }
 
 .working-paper-progress__segment--done {
+  border-color: #7fa653;
   background: #7fa653;
 }
 
 .working-paper-progress__segment--active {
-  background: #fff7df;
-  box-shadow: inset 0 0 0 1px #e8c66c;
+  border-color: #c59e40;
 }
 
 .working-paper-progress__segment--blocked {
-  background: #d95755;
+  border-color: #d95755;
+}
+
+.working-paper-progress__segment--blocked::after {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  color: #d95755;
+  content: "!";
+  font-size: 6px;
+  font-weight: 900;
+  line-height: 1;
+  transform: translate(-50%, -52%);
 }
 
 .working-paper-progress__segment--unavailable {
-  background: #cbd5e1;
+  border-color: #cbd5e1;
 }
 
 .working-paper-progress__label {
