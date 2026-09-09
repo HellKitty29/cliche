@@ -1,0 +1,244 @@
+@import "tailwindcss";
+
+.audit-procedure-table {
+  width: 100%;
+  table-layout: fixed;
+  font-size: 11.5px;
+}
+
+.audit-procedure-table th,
+.audit-procedure-table td {
+  padding: 7px 3px !important;
+  overflow-wrap: anywhere;
+  vertical-align: middle;
+}
+
+.audit-procedure-table th {
+  font-size: 10.5px;
+  overflow-wrap: normal;
+  white-space: nowrap;
+}
+
+.audit-procedure-table td.population-amount-cell {
+  text-align: right !important;
+  vertical-align: middle !important;
+  padding-right: 8px !important;
+}
+
+.audit-procedure-table select {
+  width: 100%;
+  min-width: 0;
+  padding: 2px 1px;
+  font-size: 10.5px;
+}
+
+.audit-procedure-table .text-\[8px\] {
+  font-size: 9px !important;
+}
+
+.audit-procedure-table .text-\[9px\] {
+  font-size: 10.5px !important;
+}
+
+.audit-procedure-table .text-\[10px\] {
+  font-size: 11.5px !important;
+}
+
+.audit-procedure-table .text-\[11px\] {
+  font-size: 12.5px !important;
+}
+
+.audit-procedure-table .text-\[13px\] {
+  font-size: 14.5px !important;
+}
+
+.audit-procedure-table td > span {
+  max-width: 100%;
+  justify-content: center;
+  padding-left: 3px !important;
+  padding-right: 3px !important;
+  white-space: normal;
+}
+
+.audit-procedure-table .sampling-method-value {
+  padding-right: 0 !important;
+  padding-left: 0 !important;
+  white-space: nowrap;
+}
+
+.audit-procedure-table td > span[role="img"] {
+  padding: 0 !important;
+}
+
+.audit-status-dot,
+.audit-procedure-table td > span[role="img"] {
+  display: inline-block;
+  width: 15px !important;
+  min-width: 15px;
+  height: 15px !important;
+  border-radius: 9999px;
+  border: 2px solid currentColor;
+  background-color: transparent !important;
+  box-sizing: border-box;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.audit-procedure-table td > span.audit-status-x,
+.audit-procedure-table td > span.audit-status-check,
+.audit-status-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px !important;
+  min-width: 15px;
+  height: 15px !important;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.audit-status-x::before {
+  content: "×";
+}
+
+.audit-status-check::before {
+  content: "✓";
+}
+
+.audit-person-name {
+  display: -webkit-box;
+  overflow: hidden;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.2;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.working-paper-progress {
+  display: flex;
+  align-items: flex-start;
+  gap: 0;
+  width: 100%;
+  transform: translateY(8px);
+}
+
+.working-paper-progress__item {
+  position: relative;
+  min-width: 0;
+  flex: 1;
+  text-align: center;
+}
+
+.working-paper-progress__item:not(:last-child)::after {
+  position: absolute;
+  z-index: 0;
+  top: 4px;
+  left: calc(50% + 5px);
+  width: calc(100% - 10px);
+  height: 1px;
+  background: #cbd5e1;
+  content: "";
+  pointer-events: none;
+}
+
+.working-paper-progress__item--done:not(:last-child)::after {
+  background: #a9c28e;
+}
+
+.working-paper-progress__item--active:not(:last-child)::after {
+  background: #c59e40;
+}
+
+.working-paper-progress__item--blocked:not(:last-child)::after {
+  background: #e4a09f;
+}
+
+@keyframes audit-metric-card-flip {
+  0% { transform: perspective(700px) rotateY(0deg); }
+  48% { transform: perspective(700px) rotateY(88deg); }
+  52% { transform: perspective(700px) rotateY(-88deg); }
+  100% { transform: perspective(700px) rotateY(0deg); }
+}
+
+.audit-metric-card--flip {
+  animation: audit-metric-card-flip 480ms ease-in-out;
+  transform-style: preserve-3d;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .audit-metric-card--flip {
+    animation: none;
+  }
+}
+
+.working-paper-progress__segment {
+  position: relative;
+  z-index: 1;
+  width: 9px;
+  height: 9px;
+  margin: 0 auto;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 9999px;
+  background: #fff;
+  box-sizing: border-box;
+}
+
+.working-paper-progress__segment--done {
+  border-color: #7fa653;
+  background: #7fa653;
+}
+
+.working-paper-progress__segment--active {
+  border-color: #c59e40;
+}
+
+.working-paper-progress__segment--blocked {
+  border-color: #d95755;
+}
+
+.working-paper-progress__segment--blocked::after {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  color: #d95755;
+  content: "!";
+  font-size: 6px;
+  font-weight: 900;
+  line-height: 1;
+  transform: translate(-50%, -52%);
+}
+
+.working-paper-progress__segment--unavailable {
+  border-color: #cbd5e1;
+}
+
+.working-paper-progress__label {
+  margin-top: 3px;
+  overflow: hidden;
+  color: #64748b;
+  font-size: 8px;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 1440px) {
+  .audit-procedure-table {
+    font-size: 9.5px;
+  }
+
+  .audit-procedure-table th,
+  .audit-procedure-table td {
+    padding: 6px 2px !important;
+  }
+
+  .audit-procedure-table th,
+  .audit-procedure-table select {
+    font-size: 8.5px;
+  }
+}

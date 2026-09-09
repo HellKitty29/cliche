@@ -1,8 +1,8 @@
 {
-  "name": "Copy of Audit Task Management System",
-  "description": "A high-end audit task management platform for managing templates, locations, and task execution with a sequential workflow optimization.",
-  "requestFramePermissions": [
-    "camera",
-    "microphone"
+  "name": "substantive doc x Cockpit",
+  "description": "Enterprise AI Audit Cockpit dashboard featuring Cockpit Overview, Collaboration Hub, Audit Objectives, Audit Lifecycle, and AI Agent Orchestra views.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
   ]
 }

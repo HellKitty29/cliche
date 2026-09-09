@@ -1,18 +1,73 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://pixabay.com/images/download/x-5243225_1920.jpg" />
-</div>
+# Substantive Audit Cockpit
 
+一个基于 React、TypeScript 和 Vite 的实质性审计底稿管理原型，用于集中展示审计程序、抽样信息、工作底稿、系统预检和复核记录。
 
-**Prerequisites:**  Node.js
+## 本次功能更新
 
+### 实质性程序清单
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+- 默认展示 `ABC LIMITED CO.`，并支持切换 Entity 和会计期间。
+- 支持按业务流程、质检状态和关键字筛选程序。
+- 业务流程侧栏默认收起，悬停后以弹性布局展开并压缩主表区域。
+- 支持显示或隐藏 RM ID、程序 ID、分配人、上传人和复核人。
+- 优化表格字段顺序、字号和自适应列宽；工作底稿列会根据文件数量自动扩展。
+- 总体金额支持在“元”和“百万元”之间切换，保留两位小数并右对齐。
+- SAPCE LIMITED CO. 使用稳定的模拟规则减少部分销售程序。
 
-###
-**OR you can just hit this Link**
-[Audit On-site Collection](https://copycat-1aj.pages.dev/ "Markdown Language").
+### 抽样信息
 
+- 支持 MUS、KSP、All items 和 SAP 等抽样方式展示。
+- MUS 和 KSP 提供参数、总体、重大项目及样本量等抽样详情。
+- 样本信息提供导入底稿、Sample Engine 和 Data Mining 三个入口。
+- Data Mining 入口用于模拟从 KCW 底稿数据中挖掘样本信息。
+
+### 工作底稿与文件预览
+
+- 每条程序预置 Excel 工作底稿和 PPT 支持文件，并显示对应文件类型图标。
+- 每行保留虚线上传位；本地上传文件会直接加入工作底稿列。
+- 支持查看文件详情、替换文件和删除文件；删除或替换文件不会清除已有意见与回复。
+- 文件详情集中展示工作底稿状态、标准模板使用情况、系统预检结果、上传信息、异常和复核记录。
+- Excel 和 DOCX 文件可在新页面预览；Excel 支持选择具体行并记录到复核意见。
+- 外部预览页带有可拖动、可固定的异常记录栏，展示底稿状态、系统预检异常、意见及回复。
+- 新窗口无法打开时自动回退到当前页面预览，避免原页面或预览页空白。
+
+### 复核与导出
+
+- 操作列保留复核入口，可保存意见、处理复核决定并回复指定意见。
+- 支持导出当前筛选后的程序清单。
+- 支持导出复核记录明细，包括 Entity、期间、业务流程、程序、底稿文件、工作表、Excel 行号、记录人、时间、意见、回复及复核状态。
+- 刷新按钮悬停后可分别刷新程序数据或样本与底稿文件数据。
+
+## 本地运行
+
+### 环境要求
+
+- Node.js 18+
+- npm
+
+### 启动步骤
+
+```bash
+npm install
+npm run dev
+```
+
+默认开发地址为 `http://localhost:3000/`，并允许局域网访问。
+
+## 验证命令
+
+```bash
+npm run lint
+npm run build
+npx tsx --test tests/*.test.ts
+```
+
+## 技术栈
+
+- React 19
+- TypeScript 5
+- Vite 6
+- Tailwind CSS 4
+- SheetJS（Excel 解析）
+- docx-preview（Word 预览）
+- Lucide React（界面图标）
