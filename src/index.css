@@ -3,7 +3,7 @@
 .audit-procedure-table {
   width: 100%;
   table-layout: fixed;
-  font-size: 10px;
+  font-size: 11.5px;
 }
 
 .audit-procedure-table th,
@@ -14,14 +14,42 @@
 }
 
 .audit-procedure-table th {
-  font-size: 9px;
+  font-size: 10.5px;
+  overflow-wrap: normal;
+  white-space: nowrap;
+}
+
+.audit-procedure-table td.population-amount-cell {
+  text-align: right !important;
+  vertical-align: middle !important;
+  padding-right: 8px !important;
 }
 
 .audit-procedure-table select {
   width: 100%;
   min-width: 0;
   padding: 2px 1px;
-  font-size: 9px;
+  font-size: 10.5px;
+}
+
+.audit-procedure-table .text-\[8px\] {
+  font-size: 9px !important;
+}
+
+.audit-procedure-table .text-\[9px\] {
+  font-size: 10.5px !important;
+}
+
+.audit-procedure-table .text-\[10px\] {
+  font-size: 11.5px !important;
+}
+
+.audit-procedure-table .text-\[11px\] {
+  font-size: 12.5px !important;
+}
+
+.audit-procedure-table .text-\[13px\] {
+  font-size: 14.5px !important;
 }
 
 .audit-procedure-table td > span {
@@ -201,7 +229,7 @@
 
 @media (max-width: 1440px) {
   .audit-procedure-table {
-    font-size: 9px;
+    font-size: 9.5px;
   }
 
   .audit-procedure-table th,
@@ -211,6 +239,6 @@
 
   .audit-procedure-table th,
   .audit-procedure-table select {
-    font-size: 8px;
+    font-size: 8.5px;
   }
 }
