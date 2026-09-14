@@ -51,8 +51,10 @@ export interface TaskInfo {
   id: string;
   companyName: string;
   province: string;
+  city?: string;
   executor: string;
   lastSubmitDate: string;
+  planExecutionDate?: string;
   planDate: string;
   status: '已选定' | '已提交' | '执行中' | '已指派' | '已复核' | '已接受' | '被拒绝' | '已废除' ;
   progress: string;

@@ -5,14 +5,19 @@
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { LoginOutlined } from '@ant-design/icons';
-import { AlertCircle, ChevronDown, ChevronLeft, ChevronUp, Download, Edit3, Info, Upload } from 'lucide-react';
+import { AlertCircle, ChevronDown, ChevronLeft, ChevronUp, Download, Edit3, Info, RefreshCw, Upload } from 'lucide-react';
 import InventoryMatrix, {
   INITIAL_INVENTORY_MATRIX_ROWS,
   createInventoryMatrixRow,
   type InventoryMatrixRow,
 } from './InventoryMatrix';
-import MethodPlanMatrix, { type MethodPlanMatrixHandle, type MethodPlanRow } from './MethodPlanMatrix';
+import MethodPlanMatrix, {
+  createMethodPlanRow,
+  type MethodPlanMatrixHandle,
+  type MethodPlanRow,
+} from './MethodPlanMatrix';
 import TableFullscreenFrame from './TableFullscreenFrame';
+import { parseChineseAddress } from '../utils/addressParser';
 
 type StepCompletion = '' | 'completed' | 'not-applicable';
 type AttachCompletion = '' | 'completed' | 'not-applicable';
@@ -50,19 +55,61 @@ const includesAny = (value: string, terms: string[]) =>
   terms.some((term) => value.includes(term));
 
 const isYesValue = (value: string) => includesAny(value, ['Yes', '是']);
+const isNoValue = (value: string) => includesAny(value, ['No', '否', '鍚']);
 
 const buildInventoryLocationValue = (row: Pick<MethodPlanRow, 'province' | 'city' | 'district' | 'address'>) =>
   row.address || [row.province, row.city, row.district].filter(Boolean).join(' ');
+
+const buildInventoryRowFromMethodPlanRow = (row: MethodPlanRow) => ({
+  location: buildInventoryLocationValue(row).trim(),
+  companyName: row.companyName ?? '',
+  intervieweeName: row.companyOwner ?? '',
+  category: row.importedCategory ?? '',
+  priorBalance: row.importedPriorBalance ?? '',
+  finalPlannedBalance: row.importedFinalBalance ?? '',
+  currentInterimStage: row.importedPriorInterimPlannedBalance ?? '',
+  interimPlannedBalance: row.importedInterimPlannedBalance ?? '',
+});
+
+const buildMethodPlanRowFromInventoryRow = (
+  inventoryRow: InventoryMatrixRow,
+  existingRow?: MethodPlanRow
+) => {
+  const parsedAddress = parseChineseAddress(inventoryRow.location);
+
+  return createMethodPlanRow({
+    ...existingRow,
+    companyName: inventoryRow.companyName,
+    companyOwner: inventoryRow.intervieweeName,
+    province: parsedAddress.province,
+    city: parsedAddress.city,
+    district: parsedAddress.district,
+    address: parsedAddress.fullAddress,
+    importedCategory: inventoryRow.category,
+    importedPriorBalance: inventoryRow.priorBalance,
+    importedFinalBalance: inventoryRow.finalPlannedBalance,
+    importedPriorInterimPlannedBalance: inventoryRow.currentInterimStage,
+    importedInterimPlannedBalance: inventoryRow.interimPlannedBalance,
+  });
+};
+
+const syncMethodPlanRowsFromInventoryRows = (
+  inventoryRows: InventoryMatrixRow[],
+  currentMethodRows: MethodPlanRow[]
+) =>
+  inventoryRows.map((inventoryRow, index) =>
+    buildMethodPlanRowFromInventoryRow(inventoryRow, currentMethodRows[index])
+  );
 
 function mergeImportedLocationsIntoInventoryRows(
   currentRows: InventoryMatrixRow[],
   importedRows: MethodPlanRow[]
 ) {
-  const locationValues = importedRows
-    .map((row) => buildInventoryLocationValue(row).trim())
-    .filter(Boolean);
+  const importedInventoryRows = importedRows
+    .map(buildInventoryRowFromMethodPlanRow)
+    .filter((row) => row.location);
 
-  if (locationValues.length === 0) {
+  if (importedInventoryRows.length === 0) {
     return currentRows;
   }
 
@@ -73,13 +120,13 @@ function mergeImportedLocationsIntoInventoryRows(
 
   let nextRows = baseRows;
 
-  for (const locationValue of locationValues) {
+  for (const importedRow of importedInventoryRows) {
     const emptyRowIndex = nextRows.findIndex((row) => !row.location.trim());
 
     if (emptyRowIndex >= 0) {
       nextRows[emptyRowIndex] = {
         ...nextRows[emptyRowIndex],
-        location: locationValue,
+        ...importedRow,
       };
       continue;
     }
@@ -88,7 +135,7 @@ function mergeImportedLocationsIntoInventoryRows(
       ...nextRows,
       {
         ...createInventoryMatrixRow(Math.random().toString(36).slice(2, 11)),
-        location: locationValue,
+        ...importedRow,
       },
     ];
   }
@@ -160,8 +207,9 @@ export default function PreWpOnline({ onBack, taskId }: PreWpOnlineProps) {
     INITIAL_INVENTORY_MATRIX_ROWS
   );
   const [methodPlanRows, setMethodPlanRows] = useState<MethodPlanRow[]>([]);
-  const [methodPlanNarratives, setMethodPlanNarratives] = useState<Record<string, string>>({});
-  const [sampleChangeExplanation, setSampleChangeExplanation] = useState('');
+  const [methodPlanStepFiles, setMethodPlanStepFiles] = useState<Record<number, string>>({});
+  const [methodPlanStepNotes, setMethodPlanStepNotes] = useState<Record<number, string>>({});
+  const [sampleChangeExplanations, setSampleChangeExplanations] = useState<Record<string, string>>({});
   const [isInventoryPrepCollapsed, setIsInventoryPrepCollapsed] = useState(false);
   const [isMethodPlanPrepCollapsed, setIsMethodPlanPrepCollapsed] = useState(false);
   const methodPlanMatrixRef = useRef<MethodPlanMatrixHandle>(null);
@@ -184,7 +232,7 @@ export default function PreWpOnline({ onBack, taskId }: PreWpOnlineProps) {
       value:`— 如果存放于被审计单位或第三方地点的存货数量和状况存在一项或多项重大错报风险，则将相关存货账户链接至相关的存货业务流程。从错报风险库中选择相关的错报风险并映射至相关的存货账户
             — 本工作底稿旨在说明相关程序或程序的结果记录在KPMG Clara workflow中的何处（如适用），以便项目组能够使用该工作流程的全部功能。在适用情况下，这些功能包括测试相关流程控制活动运行的有效性和实施实质性程序。如果KPMG Clara workflow索引未被纳入本工作底稿或不适用，则在KPMG Clara workflow中进行记录，或将记录作为附件添加至KPMG Clara workflow并在本工作底稿中提供索引。` ,
     },
-    
+
     {
       label: '时间安排',
       value: '本工作底稿应在风险评估和计划阶段完成，用于记录项目组对存货盘点政策的理解及监盘计划。',
@@ -232,34 +280,35 @@ export default function PreWpOnline({ onBack, taskId }: PreWpOnlineProps) {
     },
     {
       id: 4,
-      procedure: '了解影响确认存货数量和状况的会计政策或原则。',
+      procedure: '了解影响确认存货数量和状况的被审计单位会计政策或原则。',
       kaeg: ['项目组对被审计单位存货的了解 [7747.6870]'],
       workflow: [{ name: '3.1 业务流程 - 了解有关情况' }],
     },
     {
       id: 5,
-      procedure: '如管理层使用自动化程序协助盘点，了解程序抓取的信息及其如何传输至存货跟踪系统。',
+      procedure: '如果管理层已经执行了一系列自动化程序来协助盘点，了解这些程序抓取哪些信息以及该等信息如何（如通过系统接口）传输至被审计单位的存货追踪系统。适当时，引入特定项目组成员（如信息技术审计人员）。',
       kaeg: ['项目组对被审计单位存货的了解 [7747.6870]'],
       workflow: [{ name: '3.1 业务流程 - 了解有关情况' }],
     },
     {
       id: 6,
-      procedure: '了解被审计单位如何计量存货数量，包括对计量设备的校准。',
+      procedure: '了解被审计单位如何计量存货数量（包括必要时对天平、测量仪器、计量器等进行校准）。',
       kaeg: ['项目组对被审计单位存货的了解 [7747.6870]'],
       workflow: [{ name: '3.1 业务流程 - 了解有关情况' }],
     },
+    {
+      id: 7,
+      procedure: '如果被审计单位对存货数量进行估计，考虑其对项目组的存货监盘方法的影响（如是否引入专家或利用审计软件工具（SAT））。',
+      kaeg: ['项目组对被审计单位存货的了解 [7747.6870]'],
+      workflow: [{ name: '3.1 业务流程 - 了解有关情况' }],
+    }
+
   ];
 
   const inventoryMatrixPrepSteps = steps.filter((step) => step.id === 1 || step.id === 2);
-  const methodPlanPrepSteps = steps.filter((step) => [3, 4, 5, 6].includes(step.id));
-  const methodPlanNarrativeItems = [
-    { id: 'client-background', label: '记录被审计单位背景' },
-    { id: 'sample-population', label: '记录抽样总体和样本的选择' },
-    { id: 'kpmg-count-guidance', label: 'KPMG 存货盘点小组的盘点指导' },
-  ];
-
+  const methodPlanPrepSteps = steps.filter((step) => [3, 4, 5, 6, 7].includes(step.id));
   const attachmentSteps: AttachItem[] = [
-    
+
     {
       id: 1,
       nameZh: '采取控制测试方案或双重目的的方案对管理层的循环盘点实施程序',
@@ -336,6 +385,11 @@ export default function PreWpOnline({ onBack, taskId }: PreWpOnlineProps) {
   const shouldShowSubmit =
     hasCompletedAllInventorySteps && hasUploadedRequiredFiles && hasSelectedRequiredYesOptions;
 
+  const sampleChangeRows = useMemo(
+    () => methodPlanRows.filter((row) => isNoValue(row.selectedAsSample)),
+    [methodPlanRows]
+  );
+
   const getAttachmentSelectValue = (id: number): AttachCompletion => attachmentCompletion[id] ?? '';
 
   const getRequiredYesMessage = (id: number) => {
@@ -358,6 +412,12 @@ export default function PreWpOnline({ onBack, taskId }: PreWpOnlineProps) {
       mergeImportedLocationsIntoInventoryRows(current, importedRows)
     );
   };
+
+  useEffect(() => {
+    setMethodPlanRows((currentRows) =>
+      syncMethodPlanRowsFromInventoryRows(inventoryMatrixRows, currentRows)
+    );
+  }, [inventoryMatrixRows]);
 
   useEffect(() => {
     setAttachmentCompletion((current) => {
@@ -387,6 +447,10 @@ export default function PreWpOnline({ onBack, taskId }: PreWpOnlineProps) {
   const closeUploadModal = () => {
     setUploadModalTarget(null);
     setPendingFileName('');
+  };
+
+  const renderMethodPlanProcedure = (step: StepItem) => {
+    return <>{step.id}. {step.procedure}</>;
   };
 
   const confirmUpload = () => {
@@ -498,22 +562,14 @@ export default function PreWpOnline({ onBack, taskId }: PreWpOnlineProps) {
           <h2 className="border-l-4 border-blue-600 pl-3 text-lg font-bold">了解被审计单位的存货</h2>
           <button
             type="button"
-            disabled={!hasCompletedAllInventorySteps && !inventoryStepsSaved}
             onClick={() => {
-              if (hasCompletedAllInventorySteps || inventoryStepsSaved) {
-                setInventoryStepsSaved((current) => !current);
-              }
+              setInventoryStepsSaved((current) => !current);
             }}
             className={cn(
               'rounded border px-4 py-1.5 text-sm transition',
               inventoryStepsSaved
                 ? 'border-blue-600 bg-blue-600 text-white shadow-sm hover:bg-blue-700'
-                : 'border-gray-300 bg-white text-gray-700 shadow-none',
-              !hasCompletedAllInventorySteps && !inventoryStepsSaved
-                ? 'cursor-not-allowed border-gray-200 bg-white text-gray-400'
-                : !inventoryStepsSaved
-                  ? 'hover:bg-gray-50'
-                  : ''
+                : 'border-blue-600 bg-blue-600 text-white shadow-sm hover:bg-blue-700'
             )}
           >
             {inventoryStepsSaved ? '编辑' : '保存'}
@@ -610,7 +666,7 @@ export default function PreWpOnline({ onBack, taskId }: PreWpOnlineProps) {
                           )}
                         >
                           <option value="">请选择</option>
-                          <option value="completed">已完成   
+                          <option value="completed">已完成
                             completed</option>
                           <option value="not-applicable">不适用 N/A</option>
                         </select>
@@ -625,17 +681,18 @@ export default function PreWpOnline({ onBack, taskId }: PreWpOnlineProps) {
           </TableFullscreenFrame>
           <InventoryMatrix
             embedded
+            hideNoteLabels
             rows={inventoryMatrixRows}
             onRowsChange={setInventoryMatrixRows}
           />
-          <div className="mt-4 flex justify-start">
+          <div className="mt-4 flex items-center justify-between">
             <div className="flex items-center gap-3">
               <button
                 type="button"
                 onClick={() => methodPlanMatrixRef.current?.openBulkImportModal()}
                 className="rounded-lg border border-[#00338D] bg-[#00338D] px-4 py-2 text-sm font-medium text-white transition-all hover:bg-[#002b75] hover:shadow-md active:scale-95"
               >
-                批量导入地点
+                批量导入
               </button>
               <button
                 type="button"
@@ -644,6 +701,20 @@ export default function PreWpOnline({ onBack, taskId }: PreWpOnlineProps) {
                 Roll-forward
               </button>
             </div>
+            <button
+              type="button"
+              onClick={() => {
+                setInventoryStepsSaved((current) => !current);
+              }}
+              className={cn(
+                'rounded-lg border px-4 py-2 text-sm font-medium transition-all active:scale-95',
+                inventoryStepsSaved
+                  ? 'border-blue-600 bg-blue-600 text-white shadow-sm hover:bg-blue-700'
+                  : 'border-blue-600 bg-blue-600 text-white shadow-sm hover:bg-blue-700'
+              )}
+            >
+              {inventoryStepsSaved ? '编辑' : '保存'}
+            </button>
           </div>
         </div>
       </div>
@@ -672,7 +743,7 @@ export default function PreWpOnline({ onBack, taskId }: PreWpOnlineProps) {
                 <thead>
                   <tr className="bg-gray-100 text-xs tracking-wider text-gray-600">
                     <th className="w-24 border-b border-gray-200 px-4 py-2 font-medium">状态</th>
-                    <th className="min-w-[420px] border-b border-gray-200 px-4 py-2 font-medium">程序</th>
+                    <th className="min-w-[520px] border-b border-gray-200 px-4 py-2 font-medium">程序</th>
                     <th className="min-w-[240px] border-b border-gray-200 px-4 py-2 font-medium">KAEG 索引</th>
                     <th className="min-w-[260px] border-b border-gray-200 px-4 py-2 font-medium">KPMG Clara Workflow 索引</th>
                     <th className="min-w-[220px] border-b border-gray-200 px-4 py-2 font-medium">是否已完成</th>
@@ -683,7 +754,8 @@ export default function PreWpOnline({ onBack, taskId }: PreWpOnlineProps) {
                     const completionStatus = stepCompletion[step.id] ?? '';
 
                     return (
-                      <tr key={`method-plan-prep-${step.id}`} className="transition-colors hover:bg-gray-50">
+                      <React.Fragment key={`method-plan-prep-${step.id}`}>
+                      <tr className="transition-colors hover:bg-gray-50">
                         <td className="px-4 py-6 align-top">
                           <div className="flex items-start justify-center">
                             <div
@@ -699,7 +771,37 @@ export default function PreWpOnline({ onBack, taskId }: PreWpOnlineProps) {
                           </div>
                         </td>
                         <td className="whitespace-pre-line px-4 py-6 align-top font-medium leading-6 text-gray-800">
-                          {step.id}. {step.procedure}
+                          <div>{renderMethodPlanProcedure(step)}</div>
+                          {[4, 5].includes(step.id) && (
+                            <div className="mt-3">
+                              <label
+                                className="inline-flex cursor-pointer items-center gap-2 text-xs font-medium text-gray-600 transition hover:text-gray-900"
+                                htmlFor={`method-plan-step-file-${step.id}`}
+                              >
+                                <Upload size={14} className="text-[#00338D]" />
+                                <span className="max-w-[280px] truncate">
+                                  {methodPlanStepFiles[step.id] || '上传相关文件'}
+                                </span>
+                                <input
+                                  id={`method-plan-step-file-${step.id}`}
+                                  type="file"
+                                  className="sr-only"
+                                  disabled={inventoryStepsSaved}
+                                  onChange={(event) => {
+                                    const fileName = event.target.files?.[0]?.name;
+                                    if (!fileName) {
+                                      return;
+                                    }
+
+                                    setMethodPlanStepFiles((current) => ({
+                                      ...current,
+                                      [step.id]: fileName,
+                                    }));
+                                  }}
+                                />
+                              </label>
+                            </div>
+                          )}
                         </td>
                         <td className="px-4 py-6 align-top">
                           <div className="space-y-1 text-xs leading-relaxed text-gray-600">
@@ -746,6 +848,37 @@ export default function PreWpOnline({ onBack, taskId }: PreWpOnlineProps) {
                           </select>
                         </td>
                       </tr>
+                      {[6, 7].includes(step.id) && (
+                        <tr className="bg-white">
+                          <td className="px-4 pb-6 align-top" />
+                          <td className="px-4 pb-6 align-top" colSpan={3}>
+                            <label
+                              className="mb-1 block text-[11px] font-medium leading-4 text-gray-400"
+                              htmlFor={`method-plan-step-note-${step.id}`}
+                            >
+                              相关信息
+                            </label>
+                            <textarea
+                              id={`method-plan-step-note-${step.id}`}
+                              value={methodPlanStepNotes[step.id] ?? ''}
+                              disabled={inventoryStepsSaved}
+                              onChange={(event) =>
+                                setMethodPlanStepNotes((current) => ({
+                                  ...current,
+                                  [step.id]: event.target.value,
+                                }))
+                              }
+                              aria-label={`问题 ${step.id} 文件说明`}
+                              className={cn(
+                                'min-h-[64px] w-full resize-y rounded border border-gray-200 bg-white px-3 py-2 text-sm font-normal leading-5 text-gray-700 outline-none transition focus:border-blue-500 focus:ring-1 focus:ring-blue-500',
+                                inventoryStepsSaved && 'cursor-not-allowed bg-gray-50 text-gray-400'
+                              )}
+                            />
+                          </td>
+                          <td className="px-4 pb-6 align-top" />
+                        </tr>
+                      )}
+                      </React.Fragment>
                     );
                   })}
                   {!isMethodPlanPrepCollapsed && (
@@ -753,45 +886,8 @@ export default function PreWpOnline({ onBack, taskId }: PreWpOnlineProps) {
                       <td colSpan={5} className="border-t border-gray-100 px-0 py-1" />
                     </tr>
                   )}
-                  {methodPlanNarrativeItems.map((item) => (
-                    <tr key={item.id} className="transition-colors hover:bg-gray-50">
-                      <td className="px-4 py-6 align-top">
-                        <div className="flex items-start justify-center">
-                          <div
-                            className="mt-1.5 h-2.5 w-2.5 rounded-full transition-colors"
-                            style={{
-                              backgroundColor: methodPlanNarratives[item.id]?.trim()
-                                ? '#0D92F8'
-                                : '#D1D5DB',
-                            }}
-                          />
-                        </div>
-                      </td>
-                      <td className="px-4 py-5 align-top" colSpan={2}>
-                        <label
-                          className="mb-2 block text-sm font-medium leading-6 text-gray-800"
-                          htmlFor={`method-plan-narrative-${item.id}`}
-                        >
-                          {item.label}
-                        </label>
-                        <textarea
-                          id={`method-plan-narrative-${item.id}`}
-                          value={methodPlanNarratives[item.id] ?? ''}
-                          onChange={(event) =>
-                            setMethodPlanNarratives((current) => ({
-                              ...current,
-                              [item.id]: event.target.value,
-                            }))
-                          }
-                          className="min-h-[72px] w-full resize-y rounded border border-gray-200 bg-white px-3 py-2 text-sm leading-5 text-gray-700 outline-none transition focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                        />
-                      </td>
-                      <td className="px-4 py-5 align-top" />
-                      <td className="px-4 py-5 align-top" />
-                    </tr>
-                  ))}
-                  <tr className="transition-colors hover:bg-gray-50">
-                    <td className="px-4 py-6 align-top">
+                  {/* <tr className="transition-colors hover:bg-gray-50"> */}
+                    {/* <td className="px-4 py-6 align-top">
                       <div className="flex items-start justify-center">
                         <div
                           className="mt-1.5 h-2.5 w-2.5 rounded-full transition-colors"
@@ -800,22 +896,11 @@ export default function PreWpOnline({ onBack, taskId }: PreWpOnlineProps) {
                           }}
                         />
                       </div>
-                    </td>
-                    <td className="px-4 py-5 align-top" colSpan={2}>
+                    </td> */}
+                    {/* <td className="px-4 py-5 align-top" colSpan={2}>
                       <div className="flex items-start gap-2">
                         <div className="min-w-0">
-                          <div className="flex items-center gap-2 text-sm font-medium leading-6 text-gray-800">
-                            <span>上传被审计单位盘点制度</span>
-                            <button
-                              type="button"
-                              onClick={() => openUploadModal('inventoryPolicy')}
-                              className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded text-[#00338D] transition hover:bg-blue-50"
-                              aria-label="上传盘点制度"
-                              title="上传盘点制度"
-                            >
-                              <Upload size={15} />
-                            </button>
-                          </div>
+
                           {inventoryPolicyFileName && (
                             <div className="mt-1 truncate text-xs text-gray-500">
                               已上传文件: {inventoryPolicyFileName}
@@ -823,36 +908,12 @@ export default function PreWpOnline({ onBack, taskId }: PreWpOnlineProps) {
                           )}
                         </div>
                       </div>
-                    </td>
-                    <td className="px-4 py-5 align-top" />
-                    <td className="px-4 py-5 align-top" />
-                  </tr>
-                  <tr className="transition-colors hover:bg-gray-50">
-                    <td className="px-4 py-6 align-top">
-                      <div className="flex items-start justify-center">
-                        <div
-                          className="mt-1.5 h-2.5 w-2.5 rounded-full transition-colors"
-                          style={{
-                            backgroundColor: inventoryQualityFileName ? '#0D92F8' : '#D1D5DB',
-                          }}
-                        />
-                      </div>
-                    </td>
-                    <td className="px-4 py-5 align-top" colSpan={2}>
+                    </td> */}
+
+                    {/* <td className="px-4 py-5 align-top" colSpan={2}>
                       <div className="flex items-start gap-2">
                         <div className="min-w-0">
-                          <div className="flex items-center gap-2 text-sm font-medium leading-6 text-gray-800">
-                            <span>上传被审计单位存货盘点计划</span>
-                            <button
-                              type="button"
-                              onClick={() => openUploadModal('inventoryQuality')}
-                              className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded text-[#00338D] transition hover:bg-blue-50"
-                              aria-label="上传盘点质量"
-                              title="上传盘点质量"
-                            >
-                              <Upload size={15} />
-                            </button>
-                          </div>
+
                           {inventoryQualityFileName && (
                             <div className="mt-1 truncate text-xs text-gray-500">
                               已上传文件: {inventoryQualityFileName}
@@ -860,10 +921,10 @@ export default function PreWpOnline({ onBack, taskId }: PreWpOnlineProps) {
                           )}
                         </div>
                       </div>
-                    </td>
+                    </td> */}
+                    {/* <td className="px-4 py-5 align-top" />
                     <td className="px-4 py-5 align-top" />
-                    <td className="px-4 py-5 align-top" />
-                  </tr>
+                  </tr> */}
                 </tbody>
               </table>
             </div>
@@ -875,41 +936,61 @@ export default function PreWpOnline({ onBack, taskId }: PreWpOnlineProps) {
           )}
           <MethodPlanMatrix
             ref={methodPlanMatrixRef}
+            rows={methodPlanRows}
             onRowsChange={setMethodPlanRows}
             onBulkImportRows={handleMethodPlanBulkImport}
             showBulkImportButton={false}
+            hideNoteLabels
           />
-          <div className="mt-4 bg-white p-4">
-            <div className="grid grid-cols-[96px_minmax(0,1fr)] gap-4">
-              <div className="flex justify-center pt-1.5">
-                <div
-                  className="h-2.5 w-2.5 rounded-full transition-colors"
-                  style={{
-                    backgroundColor: sampleChangeExplanation.trim() ? '#0D92F8' : '#000000',
-                  }}
-                />
-              </div>
-              <div>
-                <label
-                  className="mb-2 block text-sm font-medium leading-6 text-gray-800"
-                  htmlFor="sample-change-explanation"
-                >
-                  *对样本变动的解释
-                </label>
-                <textarea
-                  id="sample-change-explanation"
-                  value={sampleChangeExplanation}
-                  onChange={(event) => setSampleChangeExplanation(event.target.value)}
-                  className="min-h-[72px] w-full resize-y rounded border border-gray-200 bg-white px-3 py-2 text-sm leading-5 text-gray-700 outline-none transition focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                />
-              </div>
+          {sampleChangeRows.length > 0 && (
+            <div className="mt-4 overflow-hidden rounded-lg border border-gray-200 bg-white">
+              <table className="w-full border-collapse text-left text-sm">
+                <thead>
+                  <tr className="bg-gray-100 text-xs tracking-wider text-gray-700">
+                    <th className="w-[180px] border-b border-gray-200 px-4 py-3 font-medium">
+                      所属公司名称
+                    </th>
+                    <th className="w-[240px] border-b border-gray-200 px-4 py-3 font-medium">
+                      受访单位名称
+                    </th>
+                    <th className="border-b border-gray-200 px-4 py-3 font-medium">
+                      对毕马威所选为监盘地点发生变动进行相关解释
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {sampleChangeRows.map((row) => (
+                    <tr key={`sample-change-${row.id}`} className="transition-colors hover:bg-gray-50">
+                      <td className="whitespace-pre-line px-4 py-4 align-top text-gray-800">
+                        {row.companyName || '-'}
+                      </td>
+                      <td className="whitespace-pre-line px-4 py-4 align-top text-gray-800">
+                        {row.companyOwner || '-'}
+                      </td>
+                      <td className="px-4 py-4 align-top">
+                        <textarea
+                          value={sampleChangeExplanations[row.id] ?? ''}
+                          onChange={(event) =>
+                            setSampleChangeExplanations((current) => ({
+                              ...current,
+                              [row.id]: event.target.value,
+                            }))
+                          }
+                          aria-label={`${row.companyName || '该行'} 监盘地点变动解释`}
+                          className="min-h-[72px] w-full resize-y rounded border border-gray-200 bg-white px-3 py-2 text-sm leading-5 text-gray-700 outline-none transition focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                        />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
-          </div>
+          )}
         </div>
       </div>
 
       <div className="space-y-4">
-        <div className="flex items-center justify-between border-l-4 border-blue-600 pl-3">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-l-4 border-blue-600 pl-3">
           <div className="flex flex-wrap items-center gap-5">
           <h2 className="text-lg font-bold">选择存货监盘方法</h2>
           <h3 className="text-sm text-blue-400">
@@ -917,7 +998,15 @@ export default function PreWpOnline({ onBack, taskId }: PreWpOnlineProps) {
           </h3>
           </div>
           <div className="flex items-center gap-4">
-  
+            <button
+              type="button"
+              className="inline-flex items-center rounded bg-blue-600 px-4 py-1.5 text-sm text-white shadow-sm transition hover:bg-blue-700"
+              aria-label="同步地点信息"
+            >
+              <RefreshCw size={14} className="mr-1.5" />
+              同步地点信息
+            </button>
+
             {shouldShowSubmit && (
               <button className="flex items-center rounded bg-blue-600 border border-gray-300 px-4 py-1.5 text-sm text-white shadow-sm transition hover:bg-gray-50">
             创建程序
@@ -950,8 +1039,8 @@ export default function PreWpOnline({ onBack, taskId }: PreWpOnlineProps) {
                         </div> */}
                       </th>
                     </tr>
-            
-                
+
+
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {attachmentSteps.map((item) => {

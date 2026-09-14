@@ -9,6 +9,7 @@ import TaskModule from './components/TaskModule';
 import TaskDashboard from './components/TaskDashboard';
 import PreWp from './components/PreWp';
 import PreWpOnline from './components/PreWpOnline';
+import PreWpJuly from './components/PreWpJuly';
 import TaskDetailPage from './components/TaskDetailPage';
 import ProjectTaskManagement from './components/ProjectTaskManagement';
 import Sidebar from './components/Sidebar';
@@ -26,6 +27,7 @@ export type AppView =
   | 'taskDashboard'
   | 'preWp'
   | 'preWpOnline'
+  | 'wpForJuly'
   | 'taskDetail'
   | 'projectTaskManagement'
   | 'indieMatrix'
@@ -62,13 +64,15 @@ const App: React.FC = () => {
               ? '#/prewp'
               : view === 'preWpOnline'
                 ? '#/prewp-online'
-                : view === 'indieMatrix'
-                  ? '#/indie-matrix'
-                  : view === 'shituiCurrent'
-                    ? '#/shitui-current'
-                    : view === 'shituiNewVersion'
-                      ? '#/shitui-new-version'
-                  : '';
+                : view === 'wpForJuly'
+                  ? '#/wp-for-july'
+                  : view === 'indieMatrix'
+                    ? '#/indie-matrix'
+                    : view === 'shituiCurrent'
+                      ? '#/shitui-current'
+                      : view === 'shituiNewVersion'
+                        ? '#/shitui-new-version'
+                    : '';
 
     if (next && window.location.hash !== next) {
       window.location.hash = next;
@@ -100,6 +104,10 @@ const App: React.FC = () => {
       }
       if (h.startsWith('#/prewp-online')) {
         setCurrentView('preWpOnline');
+        return;
+      }
+      if (h.startsWith('#/wp-for-july')) {
+        setCurrentView('wpForJuly');
         return;
       }
       if (h.startsWith('#/prewp')) {
@@ -163,6 +171,15 @@ const App: React.FC = () => {
     if (currentView === 'preWpOnline') {
       return (
         <PreWpOnline
+          taskId={selectedTaskId || ''}
+          onBack={() => setCurrentView('projectTaskManagement')}
+        />
+      );
+    }
+
+    if (currentView === 'wpForJuly') {
+      return (
+        <PreWpJuly
           taskId={selectedTaskId || ''}
           onBack={() => setCurrentView('projectTaskManagement')}
         />
@@ -252,9 +269,9 @@ const App: React.FC = () => {
 
   const isShitUiView = currentView === 'shituiCurrent' || currentView === 'shituiNewVersion';
   const isStandaloneView =
-    currentView === 'preWp' || currentView === 'taskDetail' || currentView === 'indieMatrix' || isShitUiView;
+    currentView === 'preWp' || currentView === 'wpForJuly' || currentView === 'taskDetail' || currentView === 'indieMatrix' || isShitUiView;
   const isFullWidthView = currentView === 'indieMatrix' || isShitUiView;
-  const isWideContentView = currentView === 'preWpOnline';
+  const isWideContentView = currentView === 'preWpOnline' || currentView === 'wpForJuly';
   const showShellHeader = !isShitUiView;
   const showShellFooter = !isShitUiView;
   const sidebarTopOffset = showShellHeader ? HEADER_HEIGHT : 0;
@@ -287,6 +304,9 @@ const App: React.FC = () => {
           } else if (module === 'preWpOnline') {
             setCurrentView('preWpOnline');
             setHashForView('preWpOnline');
+          } else if (module === 'wpForJuly') {
+            setCurrentView('wpForJuly');
+            setHashForView('wpForJuly');
           } else if (module === 'indieMatrix') {
             setCurrentView('indieMatrix');
             setHashForView('indieMatrix');
@@ -313,7 +333,6 @@ const App: React.FC = () => {
             <div className="flex justify-between items-start">
               <div className="max-w-2xl">
                 <h1 className="text-2xl font-bold text-gray-900 leading-tight">1325146-Tech Solutions Demo & Training (CN)</h1>
-                <p className="text-sm text-gray-500 mt-1 italic">physical test (盘点-全面实地盘点, 2025/01/01-2025/12/31)</p>
               </div>
 
               {currentView === 'workflow' && (

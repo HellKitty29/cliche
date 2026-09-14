@@ -94,3 +94,42 @@
 .field-settings-trigger:hover .field-settings-gear {
   animation: field-settings-gear-roll 0.55s ease-out;
 }
+
+@keyframes inventory-explanation-push-left {
+  0%,
+  100% {
+    transform: translateX(2px);
+    opacity: 0.62;
+  }
+  50% {
+    transform: translateX(-5px);
+    opacity: 1;
+  }
+}
+
+@keyframes inventory-explanation-push-right {
+  0%,
+  100% {
+    transform: translateX(-2px);
+    opacity: 0.62;
+  }
+  50% {
+    transform: translateX(5px);
+    opacity: 1;
+  }
+}
+
+.inventory-explanation-arrow-left {
+  animation: inventory-explanation-push-left 1.15s ease-in-out infinite;
+}
+
+.inventory-explanation-arrow-right {
+  animation: inventory-explanation-push-right 1.15s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .inventory-explanation-arrow-left,
+  .inventory-explanation-arrow-right {
+    animation: none;
+  }
+}
