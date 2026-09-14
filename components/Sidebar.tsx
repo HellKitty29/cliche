@@ -8,7 +8,7 @@ interface SidebarProps {
   isOpen: boolean;
   onClose: () => void;
   onSelectModule: (
-    module: 'workflow' | 'projectTaskManagement' | 'tasks' | 'preWp' | 'preWpOnline' | 'indieMatrix' | 'shituiCurrent' | 'shituiNewVersion'
+    module: 'workflow' | 'projectTaskManagement' | 'tasks' | 'preWp' | 'preWpOnline' | 'wpForJuly' | 'indieMatrix' | 'shituiCurrent' | 'shituiNewVersion'
   ) => void;
   activeView: AppView;
   activeWorkflowStep: ModuleStep;
@@ -105,6 +105,19 @@ const Sidebar: React.FC<SidebarProps> = ({
           </div>
           <span className={`text-[11px] font-bold whitespace-nowrap ml-2 ${activeView === 'preWpOnline' ? 'text-[#00338d]' : 'text-white'}`}>
             working paper online vesion
+          </span>
+        </button>
+
+        <button
+          onClick={() => onSelectModule('wpForJuly')}
+          className={`flex items-center h-10 px-2 rounded-md transition-all duration-200 group
+                      ${activeView === 'wpForJuly' ? 'bg-white text-[#00338d] shadow-md' : 'hover:bg-blue-800 text-white'}`}
+        >
+          <div className="flex items-center justify-center w-7 shrink-0">
+            <FileSearch size={16} className={activeView === 'wpForJuly' ? 'text-[#00338d]' : 'text-white'} />
+          </div>
+          <span className={`text-[11px] font-bold whitespace-nowrap ml-2 ${activeView === 'wpForJuly' ? 'text-[#00338d]' : 'text-white'}`}>
+            wp for july
           </span>
         </button>
 

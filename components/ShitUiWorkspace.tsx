@@ -1,8 +1,11 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   Download,
   Eye,
+  Funnel,
   Globe2,
   Mail,
   PenLine,
@@ -11,7 +14,9 @@ import {
   Search,
   Upload,
   UserRound,
+  X,
 } from 'lucide-react';
+import { shitUiNewVersionSourceRows } from './shitUiNewVersionData';
 import './shitui.css';
 
 type ShitUiPage = 'current' | 'new-version';
@@ -183,86 +188,50 @@ const baseRows = [
   },
 ];
 
-const newVersionRows = [
-  ['GOSPD01002 加盟商收入 - 函证 (Trade receivables (total customer balance) - external confirmation)', '销售(Sales)', '合同负债(Contract liabilities)', '', 'Inspection; Confirmation', 'Substantive sampling; MUS', 'Not Selected'],
-  ['GOSPD01031 销售 - 截止测试（期末前） (Sales - cut-off test (before period end))', '销售(Sales)', '营业收入', '', 'Inspection', 'All items', 'Not Selected'],
-  ['SAP1 收入的反舞弊分析程序', '销售(Sales)', '合同负债(Contract liabilities)', '', 'Predictive analysis', '', 'Not Selected'],
-  ['SPD01902 毛利的实质性分析（趋势） (Gross margin substantive analytical (trend))', '销售(Sales)', '合同负债(Contract liabilities)', '', 'Trend analysis; Ratio analysis', '', 'Not Selected'],
-  ['TOD1 加盟收入重计算', '销售(Sales)', '合同负债(Contract liabilities)', '', 'Inspection; Recalculation', 'All items', 'Not Selected'],
-  ['TOD2 银行流水核查', '销售(Sales)', '合同负债(Contract liabilities)', '', 'Inspection', 'All items', 'Not Selected'],
-  ['SPD02001 采购 - 函证或直接访问 (Purchases - external confirmation or direct access)', '采购(Purchases)', '管理费用', '', 'Inspection; Confirmation', 'Substantive sampling; MUS', 'YES'],
-  ['SPD02003 预提费用 - 检查并重新计算 (Accrued expenses - vouch and recalculate)', '采购(Purchases)', '管理费用', '', 'Inspection; Recalculation', 'Substantive sampling; MUS', 'YES'],
-  ['SPD02005 预付款 - 重新计算并检查 (Prepayment - recalculate and vouch)', '采购(Purchases)', '预付款项(Prepayments)', '', 'Inspection; Recalculation', 'All items', 'YES'],
-  ['SPD02006 采购 - 截止测试 (Purchases - cut-off test)', '采购(Purchases)', '其他应付款(Other payables)', '', 'Inspection', 'All items', 'YES'],
-  ['SPD02007 查找未入账的负债 (Search for unrecorded liabilities)', '采购(Purchases)', '管理费用', '', 'Inspection', 'Substantive sampling', 'YES'],
-  ['SPD02013 应付 - 检查 (Expenses - vouch)', '采购(Purchases)', '应付账款(Trade payables)', '', 'Inspection', 'Substantive sampling', 'YES'],
-  ['SPD17011 集团内部往来交易和余额 - 检查 (Intercompany transactions and balances - vouch)', '采购(Purchases)', '应付账款(Trade payables)', '', 'Inspection; Inquiry; Recalculation', 'All items', 'YES'],
-  ['T.TOD1 采购细节性测试 Purchase - vouching', '采购(Purchases)', '应付账款(Trade payables)', '', 'Inspection', 'Substantive sampling; MUS', 'Not Selected'],
-  ['SPD02001 采购 - 函证或直接访问 (Purchases - external confirmation or direct access)', '采购(Purchases)', '管理费用', '', 'Inspection; Confirmation', 'Substantive sampling; MUS', 'YES'],
-  ['SPD02003 预提费用 - 检查并重新计算 (Accrued expenses - vouch and recalculate)', '采购(Purchases)', '管理费用', '', 'Inspection; Recalculation', 'Substantive sampling; MUS', 'YES'],
-  ['SPD02005 预付款 - 重新计算并检查 (Prepayment - recalculate and vouch)', '采购(Purchases)', '预付款项(Prepayments)', '', 'Inspection; Recalculation', 'All items', 'YES'],
-  ['SPD02006 采购 - 截止测试 (Purchases - cut-off test)', '采购(Purchases)', '其他应付款(Other payables)', '', 'Inspection', 'All items', 'YES'],
-  ['SPD02007 查找未入账的负债 (Search for unrecorded liabilities)', '采购(Purchases)', '管理费用', '', 'Inspection', 'Substantive sampling', 'YES'],
-  ['SPD02013 应付 - 检查 (Expenses - vouch)', '采购(Purchases)', '应付账款(Trade payables)', '', 'Inspection', 'Substantive sampling', 'YES'],
-  ['SPD17011 集团内部往来交易和余额 - 检查 (Intercompany transactions and balances - vouch)', '采购(Purchases)', '应付账款(Trade payables)', '', 'Inspection; Inquiry; Recalculation', 'All items', 'YES'],
-  ['T.TOD1 采购细节性测试 Purchase - vouching', '采购(Purchases)', '应付账款(Trade payables)', '', 'Inspection', 'Substantive sampling; MUS', 'Not Selected'],
-  ['GOSPD06001 现金等价物 - 检查并评估分类 (Cash equivalents - vouch and assess classification)', '资金和债务(Treasury and debt)', '现金及现金等价物(Cash and cash equivalents)', '', 'Inspection', 'All items', 'YES'],
-  ['GOSPD06004 现金及现金等价物 - 银行存款余额调节表 (Cash and cash equivalents - bank reconciliation)', '资金和债务(Treasury and debt)', '现金及现金等价物(Cash and cash equivalents)', '', 'Inspection; Recalculation', 'All items', 'YES'],
-  ['GOSPD06008 银行函证 (Bank confirmations)', '资金和债务(Treasury and debt)', '现金及现金等价物(Cash and cash equivalents)', '', 'Inspection; Confirmation', 'All items', 'YES'],
-  ['GOSPD06014 现金及现金等价物账户 - 识别 (Unrecorded cash and cash equivalents accounts - identification)', '资金和债务(Treasury and debt)', '现金及现金等价物(Cash and cash equivalents)', '', 'Inspection; Inquiry; Confirmation', 'All items', 'YES'],
-  ['GOSPD04006 利润分享与奖金负债和费用 - 检查并重新计算 (Profit-sharing and bonus liabilities and expenses - vouch and recalculate)', '人力资源(Human resources)', '研发费用-人工费用', '', 'Inspection; Inquiry; Recalculation', 'All items', 'YES'],
-  ['GOSPD04019 员工薪酬负债 - 检查并重新计算 (Employee benefit liabilities - vouch and recalculate)', '人力资源(Human resources)', '应付工资(Payroll liabilities)', '', 'Inspection; Inquiry; Recalculation', 'All items', 'YES'],
-  ['SPD04002 职工薪酬负债 - 识别 (Employee benefit liabilities - identification)', '人力资源(Human resources)', '管理费用-人工费用', '', 'Inspection; Inquiry', 'All items', 'YES'],
-  ['SPD04004 定期工资费用 - 检查 (Periodic payroll expenses - vouch)', '人力资源(Human resources)', '应付工资(Payroll liabilities)', '', '', 'All items', 'Not Selected'],
-  ['SPD04901 工资费用的实质性分析（预测） (Payroll expense substantive analytical (predictive))', '人力资源(Human resources)', '销售费用-人工费用', '', 'Predictive analysis', '', 'YES'],
-  ['TT GOSPT09002 当期所得税 - 检查纳税申报(初稿)并验证计算的准确性 (Current tax - inspect draft tax filing and verify mathematical accuracy)', '税项(Tax)', '所得税费用', '', 'Inspection; Recalculation', 'All items', 'YES'],
-  ['TT GOSPT09003 当期所得税 - 检查上期所得税负债T表 (Current tax - inspect prior period income tax liability reconciliation)', '税项(Tax)', '递延所得税负债(Deferred tax liabilities)', '', 'Inspection; Inquiry', 'All items', 'YES'],
-  ['TT GOSPT09004 当期所得税 - 检查所得税付款 (Current tax - vouch income tax payments)', '税项(Tax)', '递延所得税资产(Deferred tax assets)', '', 'Inspection', 'All items', 'YES'],
-  ['TT GOSPT09007 递延所得税 - 检查并评估 (Deferred tax - vouch and assess)', '税项(Tax)', '递延所得税负债(Deferred tax liabilities)', '', 'Inspection; Recalculation', 'All items', 'YES'],
-  ['CNSP4 增值税 - 检查增值税负债 (VAT - vouch tax payments)', '税项(Tax)', '应交增值税(Value added tax payable)', '', 'Inspection', 'Substantive sampling; KSP', 'YES'],
-  ['CNSP5 其他税项 - 检查纳税申报 (Other tax - inspect tax filing)', '税项(Tax)', '应交其他税', '', 'Inspection; Recalculation', 'All items', 'YES'],
-  ['CNSP55 增值税项税费分析(预测) (Output VAT substantive analytical (predictive))', '税项(Tax)', '应交增值税(Value added tax payable)', '', 'Predictive analysis', '', 'YES'],
-  ['CNSP56 增值税进项税费分析(预测) (Input VAT substantive analytical (predictive))', '税项(Tax)', '应交增值税(Value added tax payable)', '', 'Predictive analysis', '', 'YES'],
-  ['GOSPD01030 存货 - 截止测试（期末后） (Sales - cut-off test (after period end))', '存货(Inventory)', '存货，总额(Inventories, gross)', '', 'Inspection', 'Substantive sampling; MUS', 'YES'],
-  ['GOSPD01031 销售 - 截止测试（期末前） (Sales - cut-off test (before period end))', '存货(Inventory)', '营业收入', '', 'Inspection', 'All items', 'YES'],
-  ['SPD02006 采购 - 截止测试 (Purchases - cut-off test)', '存货(Inventory)', '其他应付款(Other payables)', '', 'Inspection', 'Substantive sampling; MUS', 'YES'],
-  ['SPD03001 存货监盘 (Inventory observations)', '存货(Inventory)', '存货，总额(Inventories, gross)', '', 'Inspection; Observation; Inquiry', 'All items', 'YES'],
-  ['SPD03003 从盘点日起执行存货前进后推程序 - 检查 (Inventory roll-forward or roll-back from count date - vouch)', '存货(Inventory)', '存货，总额(Inventories, gross)', '', 'Inspection; Recalculation', 'Substantive sampling; MUS', 'YES'],
-  ['SPD03016 盘点日存货截止 - 截止前 (Inventory cut-off at count date - before)', '存货(Inventory)', '存货，总额(Inventories, gross)', '', '', 'All items', 'YES'],
-  ['SPD03017 盘点日存货截止 - 截止后 (Inventory cut-off at count date - after)', '存货(Inventory)', '存货，总额(Inventories, gross)', '', '', 'All items', 'YES'],
-  ['SPD03021 存放于第三方的存货 (Inventory at third party locations)', '存货(Inventory)', '存货，总额(Inventories, gross)', '', 'Inspection; Observation; Inquiry; Confirmation', 'All items', 'YES'],
-  ['SPD03025 已销售货物的成本 - 检查 (Cost of goods sold - vouch)', '存货(Inventory)', '存货，总额(Inventories, gross)', '', 'Inspection', 'Substantive sampling; MUS', 'YES'],
-  ['SPD03027 存货材料、物料和购入产成品（实际成本法）- 加权平均公式 - 检查、评价并重计算 (Inventory materials and supplies and purchased finished goods (actual cost method) - average formula - inspect, assess and recalculate)', '存货(Inventory)', '存货，总额(Inventories, gross)', '', 'Inspection; Recalculation', 'Substantive sampling; MUS', ''],
-  ['SPD03905 毛利的实质性分析（趋势） (Gross margin substantive analytical (trend))', '存货(Inventory)', '营业成本', '', 'Trend analysis', '', 'YES'],
-].map(([procedure, process, account, clarify, nature, extent, evidence], index) => {
+const uploaders = [
+  'Huang, Ian (SH/AQPP)',
+  'Lu, Lois (HZ/CP1)',
+  'Hu, Freya (BJ/CP3)',
+];
+
+const entityOptions = ['All', 'XYZ Company', 'KIEA Company'];
+
+const newVersionRows = shitUiNewVersionSourceRows.map((sourceRow, index) => {
   const draftUploaded = index % 5 === 2 ? 'negative' : 'positive';
   const draftStatus = draftUploaded === 'negative' ? 'negative' : index % 4 === 1 ? 'negative' : 'positive';
+  const uploadedBy = uploaders[index % uploaders.length];
+  const uploadedAt = `2026-07-${String((index % 18) + 2).padStart(2, '0')} ${String(9 + (index % 8)).padStart(2, '0')}:${index % 2 === 0 ? '15' : '45'}`;
 
   return {
-    procedure,
-    process,
-    account,
-    clarify,
-    nature,
-    extent,
+    ...sourceRow,
+    id: `new-version-${sourceRow.sourceId}-${index}`,
+    procedure: `${sourceRow.procedureId} ${sourceRow.procedureDescription}`.trim(),
     wpLink: 'KCw WP Hyper link',
-    guidanceLink: 'KCw Guidance Hyper link',
-    evidence,
+    usesKcwStandardWorkingPaper: draftUploaded === 'negative' ? 'No' as const : 'Yes' as const,
+    evidence: draftUploaded === 'negative' ? 'Not Selected' : 'Yes',
     misstatement: '',
     draftUploaded,
     draftStatus,
+    uploadedBy,
+    uploadedAt,
     action: 'icons',
   };
 });
 
-function renderDraftStatus(value, type) {
+function renderDraftStatus(value, type, uploadedBy = '', uploadedAt = '') {
   const isPositive = value === 'positive';
-  const label = type === 'upload' ? (isPositive ? '已上传' : '未上传') : isPositive ? '已通过' : '未通过';
 
   return (
     <span className="status-line">
       <span className={isPositive ? 'status-dot positive' : 'status-dot negative'} />
-      <span>{label}</span>
+      {type === 'upload' && isPositive ? (
+        <span className="upload-details">
+          <span>{uploadedBy}</span>
+          <span className="upload-time">{uploadedAt}</span>
+        </span>
+      ) : (
+        <span>{type === 'upload' ? '未上传' : isPositive ? '已通过' : '未通过'}</span>
+      )}
     </span>
   );
 }
@@ -414,6 +383,29 @@ function ToolButton({ icon: Icon, label, primary = false, onClick }: ToolButtonP
 function ShitUiWorkspace({ page }: ShitUiWorkspaceProps) {
   const [tableRows, setTableRows] = useState(baseRows);
   const [searchTerm, setSearchTerm] = useState('');
+  const [processFilter, setProcessFilter] = useState<string[]>([]);
+  const [uploadFilter, setUploadFilter] = useState<string[]>([]);
+  const [checkFilter, setCheckFilter] = useState<string[]>([]);
+  const [openFilter, setOpenFilter] = useState<'process' | 'draftUploaded' | 'draftStatus' | null>(null);
+  const [selectedEntity, setSelectedEntity] = useState('All');
+  const [isEntityMenuOpen, setIsEntityMenuOpen] = useState(false);
+  const [workingPaperSearches, setWorkingPaperSearches] = useState<Record<string, string>>({});
+  const [newVersionPage, setNewVersionPage] = useState(1);
+  const [newVersionPageSize, setNewVersionPageSize] = useState<15 | 30>(15);
+  const [kcwWorkingPaperChoices, setKcwWorkingPaperChoices] = useState<Record<string, 'Yes' | 'No'>>(() =>
+    Object.fromEntries(
+      newVersionRows.map((row) => [row.id, row.usesKcwStandardWorkingPaper]),
+    ) as Record<string, 'Yes' | 'No'>,
+  );
+  const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
+  const [isTransferUrlConfirmed, setIsTransferUrlConfirmed] = useState(false);
+  const [processUrlRows, setProcessUrlRows] = useState(() =>
+    Array.from(new Set(newVersionRows.map((row) => row.process))).map((process, index) => ({
+      id: `${index}-${process}`,
+      process,
+      url: '',
+    })),
+  );
   const scrollGroupsRef = useRef<Record<string, Record<string, HTMLDivElement | null>>>({});
 
   const leftColumns = columns.filter((column) => column.section === 'left' && column.key !== 'assessment');
@@ -445,6 +437,10 @@ function ShitUiWorkspace({ page }: ShitUiWorkspaceProps) {
   const tableWidth = columns.reduce((sum, column) => sum + column.width, 0) + assertionLabels.length * 24;
 
   const normalizedSearch = searchTerm.trim().toLowerCase();
+  const processFilterOptions = useMemo(
+    () => Array.from(new Set(newVersionRows.map((row) => row.process))).sort(),
+    [],
+  );
   const filteredRows = tableRows.filter((row) => {
     if (!normalizedSearch) {
       return true;
@@ -475,29 +471,86 @@ function ShitUiWorkspace({ page }: ShitUiWorkspaceProps) {
   });
 
   const filteredNewVersionRows = newVersionRows.filter((row) => {
+    const displayedUploadStatus = kcwWorkingPaperChoices[row.id] === 'No' ? 'negative' : 'positive';
+    const displayedCheckStatus =
+      kcwWorkingPaperChoices[row.id] === 'No' ? 'negative' : row.draftStatus;
+
+    if (processFilter.length > 0 && !processFilter.includes(row.process)) {
+      return false;
+    }
+    if (uploadFilter.length > 0) {
+      const matchesUploadFilter = uploadFilter.some((value) => {
+        if (value === displayedUploadStatus) {
+          return true;
+        }
+        if (value.startsWith('uploader:') && displayedUploadStatus === 'positive') {
+          return row.uploadedBy === value.slice('uploader:'.length);
+        }
+        return false;
+      });
+
+      if (!matchesUploadFilter) {
+        return false;
+      }
+    }
+    if (checkFilter.length > 0 && !checkFilter.includes(displayedCheckStatus)) {
+      return false;
+    }
     if (!normalizedSearch) {
       return true;
     }
 
     return [
-      row.procedure,
+      row.sourceId,
       row.process,
       row.account,
-      row.clarify,
-      row.nature,
+      row.rmId,
+      row.procedureId,
+      row.procedureDescription,
+      row.procedureType,
       row.extent,
       row.wpLink,
-      row.guidanceLink,
       row.evidence,
+      row.uploadedBy,
+      row.uploadedAt,
     ]
       .filter(Boolean)
       .join(' ')
       .toLowerCase()
       .includes(normalizedSearch);
   });
+  const newVersionPageCount = Math.max(1, Math.ceil(filteredNewVersionRows.length / newVersionPageSize));
+  const activeNewVersionPage = Math.min(newVersionPage, newVersionPageCount);
+  const paginatedNewVersionRows = filteredNewVersionRows.slice(
+    (activeNewVersionPage - 1) * newVersionPageSize,
+    activeNewVersionPage * newVersionPageSize,
+  );
+
+  useEffect(() => {
+    setNewVersionPage(1);
+  }, [searchTerm, processFilter, uploadFilter, checkFilter, newVersionPageSize]);
 
   const updateRowField = (rowId: string, key: string, value: string) => {
     setTableRows((current) => current.map((row) => (row.id === rowId ? { ...row, [key]: value } : row)));
+  };
+
+  const updateKcwWorkingPaperChoice = (rowId: string, value: 'Yes' | 'No') => {
+    setKcwWorkingPaperChoices((current) => ({ ...current, [rowId]: value }));
+  };
+
+  const updateProcessUrlRow = (rowId: string, key: 'process' | 'url', value: string) => {
+    setIsTransferUrlConfirmed(false);
+    setProcessUrlRows((current) => current.map((row) => (row.id === rowId ? { ...row, [key]: value } : row)));
+  };
+
+  const openTransferModal = () => {
+    setIsTransferUrlConfirmed(false);
+    setIsTransferModalOpen(true);
+  };
+
+  const closeTransferModal = () => {
+    setIsTransferUrlConfirmed(false);
+    setIsTransferModalOpen(false);
   };
 
   const registerScrollCell = (rowId: string, key: string, node: HTMLDivElement | null) => {
@@ -616,8 +669,44 @@ function ShitUiWorkspace({ page }: ShitUiWorkspaceProps) {
     );
   };
 
+  const renderEntitySelector = () => (
+    <p className="entity-row">
+      <span>Entity:</span>
+      <span className="entity-selector">
+        <button
+          type="button"
+          className="entity-selector-button"
+          aria-haspopup="listbox"
+          aria-expanded={isEntityMenuOpen}
+          onClick={() => setIsEntityMenuOpen((current) => !current)}
+        >
+          {selectedEntity}
+          <ChevronDown size={13} />
+        </button>
+        {isEntityMenuOpen && (
+          <span className="entity-selector-menu" role="listbox" aria-label="选择 Entity">
+            {entityOptions.map((entity) => (
+              <button
+                type="button"
+                role="option"
+                aria-selected={selectedEntity === entity}
+                key={entity}
+                onClick={() => {
+                  setSelectedEntity(entity);
+                  setIsEntityMenuOpen(false);
+                }}
+              >
+                {entity}
+              </button>
+            ))}
+          </span>
+        )}
+      </span>
+    </p>
+  );
+
   return (
-    <main className="app-shell">
+    <main className={`app-shell${page === 'new-version' ? ' new-version-shell' : ''}`}>
       <header className="banner" aria-label="Audit Application Platform banner">
         <div className="brand-lockup">
           <span className="kpmg-mark">KPMG</span>
@@ -650,8 +739,8 @@ function ShitUiWorkspace({ page }: ShitUiWorkspaceProps) {
               <section className="workspace">
                 <div className="page-head">
                   <div>
-                    <h1>1310956 - ABC Company</h1>
-                    <p>Entity name: ABC Company</p>
+                    <h1>1310956 - ABC Limited Co.</h1>
+                    {renderEntitySelector()}
                     <p className="period-text">会计期间: 2026年1月1日至2026年12月31日</p>
                   </div>
                   <div className="status-strip" aria-label="table status">
@@ -676,7 +765,7 @@ function ShitUiWorkspace({ page }: ShitUiWorkspaceProps) {
                   </label>
 
                   <div className="tools">
-                    <ToolButton icon={Upload} label="上传RAAR Report" />
+                    <ToolButton icon={RefreshCcw} label="更新数据" />
                     <button type="button" className="tool-button significance-button" aria-label="同步附件至KCW">
                       <span>同步附件至KCW</span>
                     </button>
@@ -751,93 +840,305 @@ function ShitUiWorkspace({ page }: ShitUiWorkspaceProps) {
             </>
           ) : (
             <section className="workspace new-version-page">
-              <div className="page-head">
-                <div>
-                  <h1>1310956 - ABC Company</h1>
-                  <p>Entity name: ABC Company</p>
-                  <p className="period-text">会计期间: 2026年1月1日至2026年12月31日</p>
-                </div>
-                <div className="new-version-status-group">
-                  <button type="button" className="new-version-level-button">
-                    重要性水平
-                  </button>
-                  <div className="status-strip" aria-label="table status">
-                    {/* <div>
-                      <strong>{filteredRows.length}</strong>
-                      <span>Risks</span>
-                    </div> */}
-                    <div>
-                      <strong>{filteredNewVersionRows.length}</strong>
-                      <span>Procedures</span>
+              <div className="new-version-sticky-area">
+                <div className="page-head">
+                  <div>
+                    <h1>1310956 - ABC Limited Co.</h1>
+                    {renderEntitySelector()}
+                    <p className="period-text">会计期间: 2026年1月1日至2026年12月31日</p>
+                  </div>
+                  <div className="new-version-status-group">
+                    <button type="button" className="new-version-level-button">
+                      重要性水平
+                    </button>
+                    <div className="status-strip" aria-label="table status">
+                      {/* <div>
+                        <strong>{filteredRows.length}</strong>
+                        <span>Risks</span>
+                      </div> */}
+                      <div>
+                        <strong>{filteredNewVersionRows.length}</strong>
+                        <span>Procedures</span>
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
 
-              <div className="control-bar new-version-control-bar">
-                <label className="search-box">
-                  <Search size={15} />
-                  <input value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} placeholder="Search RMM ID, process, account" />
-                  <button type="button" className="search-reset" aria-label="reset search" title="Reset search" onClick={() => setSearchTerm('')} disabled={!searchTerm}>
-                    <RefreshCcw color="#6871e8" strokeWidth={2.25} size={14} />
-                  </button>
-                </label>
+                <div className="control-bar new-version-control-bar">
+                  <label className="search-box">
+                    <Search size={15} />
+                    <input value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} placeholder="Search RMM ID, process, account" />
+                    <button type="button" className="search-reset" aria-label="reset search" title="Reset search" onClick={() => setSearchTerm('')} disabled={!searchTerm}>
+                      <RefreshCcw color="#6871e8" strokeWidth={2.25} size={14} />
+                    </button>
+                  </label>
 
-                <div className="tools">
-                  <ToolButton icon={Upload} label="上传RAAR Report" />
-                  <button type="button" className="tool-button significance-button" aria-label="同步附件至KCW">
-                    <span>同步附件至KCW</span>
-                  </button>
-                  <ToolButton icon={Download} label="Export" />
-                  <ToolButton icon={Save} label="Save" primary />
+                  <div className="tools">
+                    <ToolButton icon={RefreshCcw} label="更新数据" />
+                    <button
+                      type="button"
+                      className="tool-button significance-button"
+                      aria-label="同步附件至KCW"
+                      onClick={openTransferModal}
+                    >
+                      <span>同步附件至KCW</span>
+                    </button>
+                    <ToolButton icon={Download} label="Export" />
+                    <div className="new-version-pagination" aria-label="分页导航">
+                      <label className="new-version-page-size">
+                        <span>每页</span>
+                        <select
+                          value={newVersionPageSize}
+                          aria-label="每页显示行数"
+                          onChange={(event) => setNewVersionPageSize(Number(event.target.value) as 15 | 30)}
+                        >
+                          <option value={15}>15</option>
+                          <option value={30}>30</option>
+                        </select>
+                        <span>条</span>
+                      </label>
+                      <button
+                        type="button"
+                        aria-label="上一页"
+                        title="上一页"
+                        disabled={activeNewVersionPage === 1}
+                        onClick={() => setNewVersionPage((current) => Math.max(1, current - 1))}
+                      >
+                        <ChevronLeft size={15} />
+                      </button>
+                      <span className="new-version-page-indicator">
+                        {activeNewVersionPage}/{newVersionPageCount}
+                      </span>
+                      <button
+                        type="button"
+                        aria-label="下一页"
+                        title="下一页"
+                        disabled={activeNewVersionPage === newVersionPageCount}
+                        onClick={() => setNewVersionPage((current) => Math.min(newVersionPageCount, current + 1))}
+                      >
+                        <ChevronRight size={15} />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                <div className="new-version-header-row" role="table" aria-label="new version header">
+                  {[
+                    { key: 'sourceId', label: 'ID' },
+                    { key: 'process', label: '业务流程' },
+                    { key: 'account', label: '账户/披露' },
+                    { key: 'rmId', label: 'RM ID' },
+                    { key: 'procedureId', label: '程序ID' },
+                    { key: 'procedureDescription', label: '实质性程序描述' },
+                    { key: 'procedureType', label: '实质性程序类型' },
+                    { key: 'extent', label: '范围（细节测试）' },
+                    { key: 'wpLink', label: 'KCw 标准工作底稿模板' },
+                    { key: 'usesKcw', label: '是否使用KCw标准工作底稿模板' },
+                    { key: 'evidence', label: '项目组是否已从实质性程序中获取了预期的证据？' },
+                    { key: 'misstatement', label: '审计错报' },
+                    { key: 'draftUploaded', label: '底稿是否上传' },
+                    { key: 'draftStatus', label: '底稿是否通过检验' },
+                    { key: 'action', label: '操作' },
+                  ].map(({ key, label }) => (
+                    <div key={key} className="new-version-header-cell" role="columnheader">
+                      <span>{label}</span>
+                      {key === 'process' && (
+                        <div className="new-version-filter">
+                          <button
+                            type="button"
+                            className={`new-version-filter-button${processFilter.length > 0 ? ' active' : ''}`}
+                            aria-label="筛选业务流程"
+                            aria-expanded={openFilter === 'process'}
+                            onClick={() => setOpenFilter((current) => current === 'process' ? null : 'process')}
+                          >
+                            <Funnel size={12} />
+                          </button>
+                          {openFilter === 'process' && (
+                            <div className="new-version-filter-menu" role="menu" aria-label="筛选业务流程选项">
+                              {[
+                                { value: '', label: '全部' },
+                                ...processFilterOptions.map((option) => ({ value: option, label: option })),
+                              ].map((option) => (
+                                <button
+                                  type="button"
+                                  role="menuitemcheckbox"
+                                  aria-checked={option.value === '' ? processFilter.length === 0 : processFilter.includes(option.value)}
+                                  key={option.value || 'all'}
+                                  onClick={() => {
+                                    setProcessFilter((current) =>
+                                      option.value === ''
+                                        ? []
+                                        : current.includes(option.value)
+                                          ? current.filter((value) => value !== option.value)
+                                          : [...current, option.value],
+                                    );
+                                  }}
+                                >
+                                  <span className="new-version-filter-check" aria-hidden="true">
+                                    {(option.value === '' ? processFilter.length === 0 : processFilter.includes(option.value)) ? '✓' : ''}
+                                  </span>
+                                  {option.label}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      {key === 'draftUploaded' && (
+                        <div className="new-version-filter">
+                          <button
+                            type="button"
+                            className={`new-version-filter-button${uploadFilter.length > 0 ? ' active' : ''}`}
+                            aria-label="筛选底稿是否上传"
+                            aria-expanded={openFilter === 'draftUploaded'}
+                            onClick={() => setOpenFilter((current) => current === 'draftUploaded' ? null : 'draftUploaded')}
+                          >
+                            <Funnel size={12} />
+                          </button>
+                          {openFilter === 'draftUploaded' && (
+                            <div className="new-version-filter-menu" role="menu" aria-label="筛选底稿是否上传选项">
+                              {[
+                                { value: '', label: '全部' },
+                                { value: 'positive', label: '已上传' },
+                                { value: 'negative', label: '未上传' },
+                                ...uploaders.map((uploader) => ({
+                                  value: `uploader:${uploader}`,
+                                  label: uploader,
+                                })),
+                              ].map((option) => (
+                                <button
+                                  type="button"
+                                  role="menuitemcheckbox"
+                                  aria-checked={option.value === '' ? uploadFilter.length === 0 : uploadFilter.includes(option.value)}
+                                  key={option.value || 'all'}
+                                  title={option.label}
+                                  onClick={() => {
+                                    setUploadFilter((current) =>
+                                      option.value === ''
+                                        ? []
+                                        : current.includes(option.value)
+                                          ? current.filter((value) => value !== option.value)
+                                          : [...current, option.value],
+                                    );
+                                  }}
+                                >
+                                  <span className="new-version-filter-check" aria-hidden="true">
+                                    {(option.value === '' ? uploadFilter.length === 0 : uploadFilter.includes(option.value)) ? '✓' : ''}
+                                  </span>
+                                  {option.label}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      {key === 'draftStatus' && (
+                        <div className="new-version-filter">
+                          <button
+                            type="button"
+                            className={`new-version-filter-button${checkFilter.length > 0 ? ' active' : ''}`}
+                            aria-label="筛选底稿是否通过检验"
+                            aria-expanded={openFilter === 'draftStatus'}
+                            onClick={() => setOpenFilter((current) => current === 'draftStatus' ? null : 'draftStatus')}
+                          >
+                            <Funnel size={12} />
+                          </button>
+                          {openFilter === 'draftStatus' && (
+                            <div className="new-version-filter-menu" role="menu" aria-label="筛选底稿是否通过检验选项">
+                              {[
+                                { value: '', label: '全部' },
+                                { value: 'positive', label: '已通过' },
+                                { value: 'negative', label: '未通过' },
+                              ].map((option) => (
+                                <button
+                                  type="button"
+                                  role="menuitemcheckbox"
+                                  aria-checked={option.value === '' ? checkFilter.length === 0 : checkFilter.includes(option.value)}
+                                  key={option.value || 'all'}
+                                  onClick={() => {
+                                    setCheckFilter((current) =>
+                                      option.value === ''
+                                        ? []
+                                        : current.includes(option.value)
+                                          ? current.filter((value) => value !== option.value)
+                                          : [...current, option.value],
+                                    );
+                                  }}
+                                >
+                                  <span className="new-version-filter-check" aria-hidden="true">
+                                    {(option.value === '' ? checkFilter.length === 0 : checkFilter.includes(option.value)) ? '✓' : ''}
+                                  </span>
+                                  {option.label}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ))}
                 </div>
               </div>
 
               <div className="new-version-surface">
-                <div className="new-version-header-row" role="table" aria-label="new version header">
-                  {[
-                    '实质性程序描述',
-                    '业务流程',
-                    '账户/披露',
-                    '阐明程序描述',
-                    '性质',
-                    '范围（细节测试）',
-                    'KCw 标准工作底稿',
-                    'KCw 实质性程序指引',
-                    '项目组是否已从实质性程序中获取了预期的证据？',
-                    '审计错报',
-                    '底稿是否上传',
-                    '底稿是否通过检验',
-                    '操作',
-                  ].map((label) => (
-                    <div key={label} className="new-version-header-cell" role="columnheader">
-                      {label}
-                    </div>
-                  ))}
-                </div>
                 <div className="new-version-body" role="rowgroup">
-                  {filteredNewVersionRows.map((row, index) => (
+                  {paginatedNewVersionRows.map((row, index) => (
                     <div key={`${row.procedure}-${index}`} className="new-version-data-row" role="row">
-                      <div className="new-version-data-cell">{row.procedure}</div>
+                      <div className="new-version-data-cell">{row.sourceId}</div>
                       <div className="new-version-data-cell">{row.process}</div>
                       <div className="new-version-data-cell">{row.account}</div>
-                      <div className="new-version-data-cell">{row.clarify}</div>
-                      <div className="new-version-data-cell">{row.nature}</div>
+                      <div className="new-version-data-cell">{row.rmId}</div>
+                      <div className="new-version-data-cell">{row.procedureId}</div>
+                      <div className="new-version-data-cell">{row.procedureDescription}</div>
+                      <div className="new-version-data-cell">{row.procedureType}</div>
                       <div className="new-version-data-cell">{row.extent}</div>
-                      <div className="new-version-data-cell">
-                        <a href="https://example.com/kcw-wp" className="table-link" target="_blank" rel="noreferrer">
-                          {row.wpLink}
-                        </a>
+                      <div className={`new-version-data-cell${/^(TT|CNSP|SAP)/.test(row.procedureId) ? ' working-paper-search-cell' : ''}`}>
+                        {/^(TT|CNSP|SAP)/.test(row.procedureId) ? (
+                          <label className="working-paper-search">
+                            <Search size={12} aria-hidden="true" />
+                            <input
+                              type="search"
+                              value={workingPaperSearches[row.id] ?? ''}
+                              aria-label={`${row.procedureId} 查询KCw标准工作底稿`}
+                              placeholder="查询"
+                              onChange={(event) =>
+                                setWorkingPaperSearches((current) => ({
+                                  ...current,
+                                  [row.id]: event.target.value,
+                                }))
+                              }
+                            />
+                          </label>
+                        ) : (
+                          <a href="https://example.com/kcw-wp" className="table-link" target="_blank" rel="noreferrer">
+                            {row.wpLink}
+                          </a>
+                        )}
                       </div>
-                      <div className="new-version-data-cell">
-                        <a href="https://example.com/kcw-guidance" className="table-link" target="_blank" rel="noreferrer">
-                          {row.guidanceLink}
-                        </a>
+                      <div className="new-version-data-cell new-version-choice-cell">
+                        <select
+                          className="new-version-choice-select"
+                          value={kcwWorkingPaperChoices[row.id]}
+                          aria-label={`${row.procedure} 是否使用KCw标准工作底稿`}
+                          onChange={(event) => updateKcwWorkingPaperChoice(row.id, event.target.value as 'Yes' | 'No')}
+                        >
+                          <option value="Yes">Yes</option>
+                          <option value="No">No</option>
+                        </select>
                       </div>
                       <div className="new-version-data-cell">{row.evidence}</div>
                       <div className="new-version-data-cell">{row.misstatement}</div>
-                      <div className="new-version-data-cell">{renderDraftStatus(row.draftUploaded, 'upload')}</div>
-                      <div className="new-version-data-cell">{renderDraftStatus(row.draftStatus, 'check')}</div>
+
+                      <div className="new-version-data-cell">
+                        {renderDraftStatus(
+                          kcwWorkingPaperChoices[row.id] === 'No' ? 'negative' : 'positive',
+                          'upload',
+                          row.uploadedBy,
+                          row.uploadedAt,
+                        )}
+                      </div>
+                      <div className="new-version-data-cell">
+                        {renderDraftStatus(kcwWorkingPaperChoices[row.id] === 'No' ? 'negative' : row.draftStatus, 'check')}
+                      </div>
                       <div className="new-version-data-cell">
                         <ActionIcons />
                       </div>
@@ -845,6 +1146,78 @@ function ShitUiWorkspace({ page }: ShitUiWorkspaceProps) {
                   ))}
                 </div>
               </div>
+
+              {isTransferModalOpen && (
+                <div className="transfer-modal-backdrop" role="presentation" onMouseDown={closeTransferModal}>
+                  <section
+                    className="transfer-modal"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="transfer-modal-title"
+                    onMouseDown={(event) => event.stopPropagation()}
+                  >
+                    <div className="transfer-modal-header">
+                      <h2 id="transfer-modal-title">确认底稿传输地址（业务流程url）</h2>
+                      <button
+                        type="button"
+                        className="transfer-modal-close"
+                        aria-label="关闭弹窗"
+                        title="关闭"
+                        onClick={closeTransferModal}
+                      >
+                        <X size={18} />
+                      </button>
+                    </div>
+
+                    <div className="transfer-table" role="table" aria-label="业务流程传输地址">
+                      <div className="transfer-table-row transfer-table-head" role="row">
+                        <div role="columnheader">业务流程</div>
+                        <div role="columnheader">URL</div>
+                      </div>
+                      <div className="transfer-table-body" role="rowgroup">
+                        {processUrlRows.map((row) => (
+                          <div key={row.id} className="transfer-table-row" role="row">
+                            <div role="cell">
+                              <input
+                                type="text"
+                                value={row.process}
+                                aria-label={`${row.process} 业务流程`}
+                                onChange={(event) => updateProcessUrlRow(row.id, 'process', event.target.value)}
+                              />
+                            </div>
+                            <div role="cell">
+                              <input
+                                type="text"
+                                value={row.url}
+                                aria-label={`${row.process} URL`}
+                                placeholder="请输入业务流程 URL"
+                                onChange={(event) => updateProcessUrlRow(row.id, 'url', event.target.value)}
+                              />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="transfer-modal-footer">
+                      <button type="button" className="transfer-modal-button" onClick={() => setIsTransferUrlConfirmed(true)}>
+                        确认url地址
+                      </button>
+                      <button
+                        type="button"
+                        className="transfer-modal-button primary"
+                        disabled={!isTransferUrlConfirmed}
+                        onClick={closeTransferModal}
+                      >
+                        发送至KCw
+                      </button>
+                      <button type="button" className="transfer-modal-button" onClick={closeTransferModal}>
+                        取消
+                      </button>
+                    </div>
+                  </section>
+                </div>
+              )}
             </section>
           )}
         </div>
