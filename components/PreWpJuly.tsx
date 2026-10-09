@@ -1,4 +1,4 @@
-import { getInventoryProcedureDecision } from '../utils/inventoryProcedureRules';
+﻿import { getInventoryProcedureDecision } from '../utils/inventoryProcedureRules';
 ﻿/**
  * @license
  * SPDX-License-Identifier: Apache-2.0
@@ -10,6 +10,7 @@ import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Download, Edit3, Ext
 import InventoryMatrix, {
   INITIAL_INVENTORY_MATRIX_ROWS,
   createInventoryMatrixRow,
+  resolveInventoryAuditApproach,
   type InventoryMatrixRow,
 } from './InventoryMatrixJuly';
 import MethodPlanMatrix, {
@@ -31,6 +32,7 @@ type TaskDetail = {
 
 type StepItem = {
   id: number;
+  displayNumber?: number;
   procedure: string;
   kaeg: readonly string[];
   workflow: readonly { readonly name: string }[];
@@ -79,7 +81,7 @@ const PRE_WP_JULY_STEP_REFERENCES = Object.freeze({
   }),
   7: Object.freeze({
     kaeg: Object.freeze(['项目组对被审计单位存货的了解 [7747.6870]']),
-    workflow: Object.freeze([{ name: '2.1.3 计划阶段的分析程序' }]),
+    workflow: Object.freeze([]),
   }),
   8: Object.freeze({
     kaeg: Object.freeze(['项目组对被审计单位存货的了解 [7747.6870]']),
@@ -91,19 +93,19 @@ const PRE_WP_JULY_STEP_NOTE_PLACEHOLDERS: Partial<Record<number, string>> = {};
 
 const PRE_WP_JULY_STEP_TWO_SUBQUESTIONS = Object.freeze([
   Object.freeze({
-    id: '2.1',
+    id: '1.1',
     text: '被审计单位的存货是否存放在多个地点？',
     selection: 'single',
     options: Object.freeze(['是', '否']),
   }),
   Object.freeze({
-    id: '2.2',
+    id: '1.2',
     text: '勾选被审计单位的存货类型及存储方式？',
     selection: 'multiple',
     options: Object.freeze(['在途存货', '在产品', '包装箱中的存货', '散货集装箱中的存货', '不涉及以上类型的存货']),
   }),
   Object.freeze({
-    id: '2.3',
+    id: '1.3',
     text: '被审计单位是否持有如下特殊类型的存货？如有，请勾选。',
     selection: 'multiple',
     options: Object.freeze([
@@ -121,28 +123,28 @@ const PRE_WP_JULY_STEP_TWO_SUBQUESTIONS = Object.freeze([
     breakBeforeOption: '木材、钢筋盘条、管子',
   }),
   Object.freeze({
-    id: '2.4',
+    id: '1.4',
     text: '被审计单位是否聘请外部专业机构（例如专业测量公司）协助进行存货盘点？',
     selection: 'single',
     options: Object.freeze(['是', '否']),
   }),
   Object.freeze({
-    id: '2.5',
+    id: '1.5',
     text: '被审计单位是否存在高度自动化仓库？如有，请勾选。',
     selection: 'multiple',
     options: Object.freeze(['自动化与人工相结合的自动化仓库', '完全自动化仓库', '不存在高度自动化仓库']),
   }),
   Object.freeze({
-    id: '2.6',
+    id: '1.6',
     text: '被审计单位仓库中是否存在所有权不属于被审计单位的存货',
     selection: 'single',
     options: Object.freeze(['是', '否']),
   }),
 ]);
 const STEP_TWO_EXCLUSIVE_MULTIPLE_OPTIONS: Partial<Record<string, string>> = {
-  '2.2': '不涉及以上类型的存货',
-  '2.3': '不涉及以上性质或存储方式的存货',
-  '2.5': '不存在高度自动化仓库',
+  '1.2': '不涉及以上类型的存货',
+  '1.3': '不涉及以上性质或存储方式的存货',
+  '1.5': '不存在高度自动化仓库',
 };
 
 const MULTIPLE_LOCATION_COMPLETENESS_PROCEDURES = Object.freeze([
@@ -277,6 +279,15 @@ const buildInventoryRowFromMethodPlanRow = (row: MethodPlanRow) => ({
   finalPlannedBalance: row.importedFinalBalance ?? '',
   currentInterimStage: row.importedPriorInterimPlannedBalance ?? '',
   interimPlannedBalance: row.importedInterimPlannedBalance ?? '',
+  plannedAttendancePrimary: '是',
+  plannedAttendanceSecondary: row.auditApproach === '独立盘点方案' ? '否，项目组采取独立盘点' : '是',
+  auditApproach: row.auditApproach ?? '从下拉菜单选择',
+  sampleQuantity: row.sampleQuantity ?? '',
+  confirmedInventoryMethod: '从下拉菜单选择',
+  confirmThirdPartyInventory: row.confirmThirdPartyInventory ?? '否',
+  monitorMode: row.monitorMode ?? '从下拉菜单选择',
+  useExperts: row.useExperts ?? '否',
+  useInternalAudit: row.useInternalAudit ?? '否',
 });
 
 const EMPTY_INVENTORY_IMPORT_ROW = createInventoryMatrixRow('');
@@ -299,6 +310,12 @@ const hasInventoryImportContent = (
     | 'currentInterimStage'
     | 'interimPlannedBalance'
     | 'finalPlannedBalance'
+    | 'auditApproach'
+    | 'sampleQuantity'
+    | 'confirmThirdPartyInventory'
+    | 'monitorMode'
+    | 'useExperts'
+    | 'useInternalAudit'
   >
 ) =>
   [
@@ -321,6 +338,12 @@ const hasInventoryImportContent = (
     row.countMethod === EMPTY_INVENTORY_IMPORT_ROW.countMethod ? '' : row.countMethod,
     row.useExpert === EMPTY_INVENTORY_IMPORT_ROW.useExpert ? '' : row.useExpert,
     row.selectedAsSample === EMPTY_INVENTORY_IMPORT_ROW.selectedAsSample ? '' : row.selectedAsSample,
+    row.auditApproach === EMPTY_INVENTORY_IMPORT_ROW.auditApproach ? '' : row.auditApproach,
+    row.sampleQuantity,
+    row.confirmThirdPartyInventory === EMPTY_INVENTORY_IMPORT_ROW.confirmThirdPartyInventory ? '' : row.confirmThirdPartyInventory,
+    row.monitorMode === EMPTY_INVENTORY_IMPORT_ROW.monitorMode ? '' : row.monitorMode,
+    row.useExperts === EMPTY_INVENTORY_IMPORT_ROW.useExperts ? '' : row.useExperts,
+    row.useInternalAudit === EMPTY_INVENTORY_IMPORT_ROW.useInternalAudit ? '' : row.useInternalAudit,
   ].some((value) => value.trim());
 
 const isEmptyInventoryImportTarget = (row: InventoryMatrixRow) =>
@@ -334,11 +357,18 @@ const buildMethodPlanRowFromInventoryRow = (
 
   return createMethodPlanRow({
     ...existingRow,
+    id: inventoryRow.id,
     companyName: inventoryRow.companyName,
     companyOwner: inventoryRow.intervieweeName,
     selectedAsSample: inventoryRow.selectedAsSample,
     sampleChangeReason: inventoryRow.sampleChangeReason,
     countMethod: inventoryRow.countMethod,
+    sampleQuantity: inventoryRow.sampleQuantity,
+    confirmThirdPartyInventory: inventoryRow.confirmThirdPartyInventory,
+    auditApproach: resolveInventoryAuditApproach(inventoryRow) ?? inventoryRow.auditApproach,
+    monitorMode: inventoryRow.monitorMode,
+    useExperts: inventoryRow.useExperts,
+    useInternalAudit: inventoryRow.useInternalAudit,
     province: parsedAddress.province,
     city: parsedAddress.city,
     district: parsedAddress.district,
@@ -359,12 +389,14 @@ const buildMethodPlanRowFromInventoryRow = (
 const syncMethodPlanRowsFromInventoryRows = (
   inventoryRows: InventoryMatrixRow[],
   currentMethodRows: MethodPlanRow[]
-) =>
-  inventoryRows
+) => {
+  const currentRowsById = new Map(currentMethodRows.map((row) => [row.id, row]));
+  return inventoryRows
     .filter((inventoryRow) => isYesValue(inventoryRow.selectedAsSample))
-    .map((inventoryRow, index) =>
-      buildMethodPlanRowFromInventoryRow(inventoryRow, currentMethodRows[index])
+    .map((inventoryRow) =>
+      buildMethodPlanRowFromInventoryRow(inventoryRow, currentRowsById.get(inventoryRow.id))
   );
+};
 
 function mergeImportedLocationsIntoInventoryRows(
   currentRows: InventoryMatrixRow[],
@@ -475,56 +507,68 @@ function KButton({ label, className = '' }: { label: string; className?: string 
   );
 }
 
-function PreWpJulyStepIndicator({
+function PreWpJulyCompactStepIndicator({
   currentStage,
   onStageClick,
+  showSave,
+  onSave,
+  saved,
 }: {
   currentStage: PreWpJulyStage;
   onStageClick: (stage: PreWpJulyStage) => void;
+  showSave: boolean;
+  onSave: () => void;
+  saved: boolean;
 }) {
   const stages: Array<{ key: PreWpJulyStage; label: string }> = [
     { key: 'method', label: '了解被审计单位的存货' },
     { key: 'understand', label: '存货了解矩阵' },
     { key: 'plan', label: '确定项目组的存货监盘方法' },
   ];
-  const currentIndex = stages.findIndex((stage) => stage.key === currentStage);
 
   return (
-    <nav className="inline-flex w-max max-w-none flex-nowrap items-center gap-1 rounded-full border border-gray-200 bg-white px-2 py-1 shadow-sm">
+    <nav
+      className="fixed right-5 top-1/2 z-[55] flex -translate-y-1/2 flex-col items-center gap-3 rounded-full border border-white/70 bg-white/65 px-2 py-3 shadow-lg backdrop-blur-xl"
+      aria-label="快速步骤导航"
+    >
+      <span className="absolute bottom-6 top-6 left-1/2 w-px -translate-x-1/2 bg-slate-200" aria-hidden="true" />
       {stages.map((stage, index) => {
         const isActive = stage.key === currentStage;
-        const isDone = currentIndex > index;
-
         return (
-          <React.Fragment key={stage.key}>
-            <button
-              type="button"
-              onClick={() => onStageClick(stage.key)}
-              className={cn(
-                'flex min-w-[120px] items-center justify-center gap-3 rounded-full px-4 py-2.5 text-left transition-all duration-400',
-                isActive && 'scale-[1.02] bg-blue-primary text-white shadow-md',
-                !isActive && isDone && 'text-blue-primary hover:bg-blue-50',
-                !isActive && !isDone && 'text-gray-400 hover:bg-gray-50'
-              )}
-            >
-              <span
-                className={cn(
-                  'flex h-5 w-5 shrink-0 items-center justify-center rounded-full border text-[10px] font-bold',
-                  isActive ? 'border-white bg-white/20' : 'border-current'
-                )}
-              >
-                {index + 1}
-              </span>
-              <span className="whitespace-nowrap text-xs font-bold leading-tight">{stage.label}</span>
-            </button>
-            {index < stages.length - 1 && (
-              <div className="mx-0.5 text-gray-400">
-                <ChevronRight size={15} />
-              </div>
+          <button
+            key={stage.key}
+            type="button"
+            onClick={() => onStageClick(stage.key)}
+            title={stage.label}
+            aria-label={`${index + 1} ${stage.label}`}
+            aria-current={isActive ? 'step' : undefined}
+            className={cn(
+              'relative z-10 flex h-8 w-8 items-center justify-center rounded-full border text-xs font-bold shadow-sm transition hover:scale-105',
+              isActive
+                ? 'border-[#00338D] bg-[#00338D] text-white'
+                : 'border-slate-300 bg-white text-slate-500 hover:border-blue-400 hover:text-[#00338D]'
             )}
-          </React.Fragment>
+          >
+            {index + 1}
+          </button>
         );
       })}
+      {showSave && (
+        <button
+          type="button"
+          onClick={onSave}
+          title="保存"
+          aria-label="保存"
+          className={cn(
+            'relative z-10 flex h-8 w-8 items-center justify-center rounded-full border text-xs font-bold shadow-sm backdrop-blur-sm transition hover:scale-105',
+            saved
+              ? 'border-blue-600/75 bg-white/90 text-blue-700 hover:border-sky-300'
+              : 'border-blue-600/30 bg-white/80 text-blue-700 hover:border-sky-300'
+          )}
+        >
+          <Save size={15} strokeWidth={2} aria-hidden="true" />
+        </button>
+      )}
     </nav>
   );
 }
@@ -540,7 +584,7 @@ function StepProcedureCell({
     <div className="space-y-1">
       <div className="font-medium leading-6 text-gray-800">
         <span className="inline-flex flex-wrap items-start gap-1">
-          <span className="whitespace-pre-line">{step.id}. {step.procedure}</span>
+          <span className={cn('whitespace-pre-line', step.id === 1 && 'font-bold')}>{step.displayNumber !== undefined ? `${step.displayNumber}. ` : ''}{step.procedure}</span>
           <span className="inline-flex items-center gap-1 pt-1">
             {step.kaeg.map((item, index) => (
               <KButton key={`${step.id}-kaeg-${index}`} label={item} />
@@ -548,7 +592,7 @@ function StepProcedureCell({
           </span>
         </span>
       </div>
-      {(step.id === 1 || step.id === 7) && <div className="space-y-0.5">
+      {(step.id === 2 || step.id === 7) && <div className="space-y-0.5">
         {step.workflow.length > 0 ? (
           step.workflow.map((item, index) => (
             <div
@@ -704,19 +748,19 @@ function StepTwoGuidanceCard({
         <div className="max-w-md">
           <h4 className="text-base font-semibold text-gray-800">审计指引尚未生成</h4>
           <p className="mt-2 text-sm leading-6 text-gray-500">
-            请完成第二题的全部分题，并点击“确认并生成指引”。
+            请完成存货性质问卷的全部分题，并点击“确认并生成指引”。
           </p>
         </div>
       </div>
     );
   }
 
-  const hasMultipleLocations = (selections['2.1'] ?? []).includes('是');
-  const usesExternalProfessionalOrganization = (selections['2.4'] ?? []).includes('是');
-  const hasThirdPartyOwnedInventory = (selections['2.6'] ?? []).includes('是');
-  const selectedStorageMethods = selections['2.2'] ?? [];
-  const selectedSpecialInventoryTypes = selections['2.3'] ?? [];
-  const selectedAutomatedWarehouseTypes = selections['2.5'] ?? [];
+  const hasMultipleLocations = (selections['1.1'] ?? []).includes('是');
+  const usesExternalProfessionalOrganization = (selections['1.4'] ?? []).includes('是');
+  const hasThirdPartyOwnedInventory = (selections['1.6'] ?? []).includes('是');
+  const selectedStorageMethods = selections['1.2'] ?? [];
+  const selectedSpecialInventoryTypes = selections['1.3'] ?? [];
+  const selectedAutomatedWarehouseTypes = selections['1.5'] ?? [];
   const multipleLocationSummary = hasMultipleLocations
     ? '被审计单位的存货存放于多个地点'
     : '被审计单位的存货未存放于多个地点';
@@ -823,38 +867,38 @@ function StepTwoGuidanceCard({
       </div>
 
       <GuidanceTable
-        title="2.1 存货存放地点"
+        title="1.1 存货存放地点"
         rows={multipleLocationRows}
         typeHeader="存货存放情况"
         summaryOnly={hasMultipleLocations ? undefined : multipleLocationSummary}
       />
       <GuidanceTable
-        title="2.2 存货类型及存储方式"
+        title="1.2 存货类型及存储方式"
         rows={storageGuidanceRows}
         typeHeader="存货类型及存储方式"
         summaryOnly={storageSummaryOnly}
       />
       <GuidanceTable
-        title="2.3 特殊类型的存货"
+        title="1.3 特殊类型的存货"
         rows={specialGuidanceRows}
         typeHeader="特殊类型的存货"
         summaryOnly={specialInventorySummaryOnly}
       />
       <GuidanceTable
-        title="2.4 外部专业机构参与存货盘点"
+        title="1.4 外部专业机构参与存货盘点"
         rows={externalOrganizationRows}
         typeHeader={externalOrganizationSummary}
         summaryOnly={usesExternalProfessionalOrganization ? undefined : externalOrganizationSummary}
       />
 
       <GuidanceTable
-        title="2.5 高度自动化仓库"
+        title="1.5 高度自动化仓库"
         rows={automatedWarehouseGuidanceRows}
         typeHeader="自动化仓库类型"
         summaryOnly={automatedWarehouseSummaryOnly}
       />
       <GuidanceTable
-        title="2.6 所有权不属于被审计单位的存货"
+        title="1.6 所有权不属于被审计单位的存货"
         rows={thirdPartyOwnedInventoryRows}
         typeHeader="存货所有权情况"
         summaryOnly={hasThirdPartyOwnedInventory ? undefined : thirdPartyOwnedInventorySummary}
@@ -878,14 +922,18 @@ export default function PreWpJuly({ onBack, taskId }: PreWpJulyProps) {
   const [methodPlanRows, setMethodPlanRows] = useState<MethodPlanRow[]>([]);
   const [methodPlanStepFiles, setMethodPlanStepFiles] = useState<Record<number, string>>({});
   const [methodPlanStepNotes, setMethodPlanStepNotes] = useState<Record<number, string>>({});
+  const [entityRiskLevel, setEntityRiskLevel] = useState('');
+  const [entityIndustry, setEntityIndustry] = useState('');
+  const [entityIndustrySegment, setEntityIndustrySegment] = useState('');
+  const [interimInventoryTotal, setInterimInventoryTotal] = useState('');
+  const [yearEndInventoryTotal, setYearEndInventoryTotal] = useState('');
   const [stepTwoSelections, setStepTwoSelections] = useState<Record<string, string[]>>({});
   const [isStepTwoConfirmed, setIsStepTwoConfirmed] = useState(false);
   const [isStepTwoCollapsed, setIsStepTwoCollapsed] = useState(false);
   const [activeStepTwoCard, setActiveStepTwoCard] = useState<0 | 1>(0);
   const [stepTwoCarouselHeight, setStepTwoCarouselHeight] = useState<number | null>(null);
   const [activePreWpJulyStage, setActivePreWpJulyStage] = useState<PreWpJulyStage>('method');
-  const [isWorkpaperIntroCollapsed, setIsWorkpaperIntroCollapsed] = useState(false);
-  const [isInventoryPrepCollapsed, setIsInventoryPrepCollapsed] = useState(false);
+  const [isWorkpaperIntroCollapsed, setIsWorkpaperIntroCollapsed] = useState(true);
   const [isMethodPlanPrepCollapsed, setIsMethodPlanPrepCollapsed] = useState(false);
   const [isPlanSetupCollapsed, setIsPlanSetupCollapsed] = useState(false);
   const [hasConfirmedKoicPush, setHasConfirmedKoicPush] = useState(false);
@@ -897,6 +945,7 @@ export default function PreWpJuly({ onBack, taskId }: PreWpJulyProps) {
   const shouldRestoreStepTwoCardPositionRef = useRef(false);
   const inventorySectionRef = useRef<HTMLDivElement>(null);
   const methodPlanProgramSectionRef = useRef<HTMLDivElement>(null);
+  const planSectionRef = useRef<HTMLDivElement>(null);
   const workpaperHeaderRef = useRef<HTMLDivElement>(null);
   const [showFloatingSaveButton, setShowFloatingSaveButton] = useState(false);
   const [isWorkpaperHeaderPinned, setIsWorkpaperHeaderPinned] = useState(false);
@@ -949,53 +998,55 @@ export default function PreWpJuly({ onBack, taskId }: PreWpJulyProps) {
   const steps: StepItem[] = [
     {
       id: 1,
-      procedure: '询问管理层，了解并记录被审计单位的业务背景、存货的性质与构成类型。关注并记录存货的波动程度，发生的所有显著变化，以及是否存在任何高价值项目。',
-      ...PRE_WP_JULY_STEP_REFERENCES[1],
-    },
-    {
-      id: 2,
       procedure: '根据了解到的被审计单位存货性质信息进行勾选，获悉项目组在设计或执行程序时应考虑的因素',
       ...PRE_WP_JULY_STEP_REFERENCES[2],
     },
     {
+      id: 2,
+      displayNumber: 1,
+      procedure: '询问管理层，了解并记录被审计单位的业务背景、存货的性质与构成类型。关注并记录存货的波动程度，发生的所有显著变化，以及是否存在任何高价值项目。',
+      ...PRE_WP_JULY_STEP_REFERENCES[1],
+    },
+    {
       id: 3,
+      displayNumber: 2,
       procedure: '如被审计单位使用是外部专家，记录专家的工作流程与政策性文件。',
       ...PRE_WP_JULY_STEP_REFERENCES[3],
     },
     {
       id: 4,
+      displayNumber: 3,
       procedure: '如果管理层已经执行了一系列自动化程序来协助盘点，记录程序抓取哪些信息以及该等信息如何传输至被审计单位的存货追踪系统（如通过系统接口）。\n \t并记录项目组是否考虑引入特定项目组成员（如信息技术审计人员）。',
       ...PRE_WP_JULY_STEP_REFERENCES[4],
     },
     {
       id: 5,
+      displayNumber: 4,
       procedure: '记录被审计单位是如何计量存货数量（包括必要时对天平、测量仪器、计量器等进行校准） 。',
       ...PRE_WP_JULY_STEP_REFERENCES[5],
     },
     {
       id: 6,
+      displayNumber: 5,
       procedure: '如果被审计单位对存货数量进行估计，记录其对项目组的存货监盘方法的影响及项目组的应对方式。',
       ...PRE_WP_JULY_STEP_REFERENCES[6],
     },
     {
       id: 7,
-      procedure: '了解被审计单位的存货类型和存放地点。获取各存放地点的存货的类型、和已调节至期中总账的存货信息，并完成矩阵。',
+      displayNumber: 6,
+      procedure: '了解被审计单位的存货类型和存放地点。获取各存放地点的存货的类型、和已调节至期中总账的存货信息，并记录项目组如何确认监盘范围和样本量及完成样本的分配。',
       ...PRE_WP_JULY_STEP_REFERENCES[7],
     },
     {
       id: 8,
-      procedure: '记录项目组如何确认监盘范围和样本量及完成样本的分配，并完成监盘计划矩阵',
+      displayNumber: 7,
+      procedure: '如果被审计单位使用抽样方法来选取存货实物进行盘点，则按照“评价被审计单位使用抽样方法的适当性（如适用）进行存货盘点”实施程序。',
       ...PRE_WP_JULY_STEP_REFERENCES[8],
     },
 
   ];
 
-  const inventoryMatrixPrepSteps = steps.filter((step) => step.id === 7);
-  const methodPlanPrepSteps = steps.filter((step) => [1, 2, 3, 4, 5, 6, 8].includes(step.id));
-  const methodDeterminationSteps = steps.filter((step) => [1, 2, 3, 4, 5, 6].includes(step.id));
-  const inventoryPlanSteps = steps.filter((step) => step.id === 8);
-  const visibleMethodPlanPrepSteps =
-    activePreWpJulyStage === 'method' ? methodDeterminationSteps : inventoryPlanSteps;
+  const visibleMethodPlanPrepSteps = steps.filter((step) => [1, 2, 3, 4, 5, 6, 7, 8].includes(step.id));
   const attachmentSteps: AttachItem[] = [
 
     {
@@ -1082,7 +1133,7 @@ export default function PreWpJuly({ onBack, taskId }: PreWpJulyProps) {
   };
 
   const hasStepInputContent = (stepId: number) =>
-    stepId === 2
+    stepId === 1
       ? Object.values(stepTwoSelections).some((selectedOptions) => selectedOptions.length > 0)
       : Boolean(methodPlanStepNotes[stepId]?.trim());
 
@@ -1090,6 +1141,17 @@ export default function PreWpJuly({ onBack, taskId }: PreWpJulyProps) {
     (subquestion) =>
       !('options' in subquestion) || (stepTwoSelections[subquestion.id]?.length ?? 0) > 0
   );
+
+  const isMethodPlanPrepComplete =
+    Boolean(
+      entityRiskLevel &&
+      entityIndustry &&
+      entityIndustrySegment.trim() &&
+      interimInventoryTotal.trim() &&
+      yearEndInventoryTotal.trim()
+    ) &&
+    isStepTwoComplete &&
+    [2, 3, 4, 5, 6, 7, 8].every((stepId) => Boolean(methodPlanStepNotes[stepId]?.trim()));
 
   const scrollToStepTwoCard = (cardIndex: 0 | 1) => {
     setActiveStepTwoCard(cardIndex);
@@ -1109,6 +1171,11 @@ export default function PreWpJuly({ onBack, taskId }: PreWpJulyProps) {
 
   const handlePageSave = () => {
     setInventoryStepsSaved(true);
+
+    if (isMethodPlanPrepComplete) {
+      setIsMethodPlanPrepCollapsed(true);
+      return;
+    }
 
     if (isStepTwoConfirmed && isStepTwoComplete) {
       setIsStepTwoCollapsed(false);
@@ -1155,6 +1222,49 @@ export default function PreWpJuly({ onBack, taskId }: PreWpJulyProps) {
     );
   };
 
+  const handleMethodPlanRowsChange = (nextRows: MethodPlanRow[]) => {
+    setMethodPlanRows(nextRows);
+    const nextRowsById = new Map(nextRows.map((row) => [row.id, row]));
+
+    setInventoryMatrixRows((currentRows) =>
+      currentRows.map((inventoryRow) => {
+        const methodRow = nextRowsById.get(inventoryRow.id);
+        if (!methodRow) return inventoryRow;
+
+        return {
+          ...inventoryRow,
+          location: buildInventoryLocationValue(methodRow).trim(),
+          companyName: methodRow.companyName,
+          intervieweeName: methodRow.companyOwner,
+          selectedAsSample: methodRow.selectedAsSample,
+          sampleChangeReason: methodRow.sampleChangeReason,
+          category: methodRow.importedCategory ?? inventoryRow.category,
+          endingBalanceConfirmation:
+            methodRow.importedEndingBalanceConfirmation ?? inventoryRow.endingBalanceConfirmation,
+          systemType: methodRow.importedSystemType ?? inventoryRow.systemType,
+          thirdPartyStorage: methodRow.importedThirdPartyStorage ?? inventoryRow.thirdPartyStorage,
+          inventoryCountPlan:
+            methodRow.importedInventoryCountPlan ?? inventoryRow.inventoryCountPlan,
+          countMethod: methodRow.countMethod,
+          useExpert: methodRow.importedUseExpert ?? inventoryRow.useExpert,
+          priorBalance: methodRow.importedPriorBalance ?? inventoryRow.priorBalance,
+          finalPlannedBalance:
+            methodRow.importedFinalBalance ?? inventoryRow.finalPlannedBalance,
+          currentInterimStage:
+            methodRow.importedPriorInterimPlannedBalance ?? inventoryRow.currentInterimStage,
+          interimPlannedBalance:
+            methodRow.importedInterimPlannedBalance ?? inventoryRow.interimPlannedBalance,
+          auditApproach: methodRow.auditApproach,
+          sampleQuantity: methodRow.sampleQuantity,
+          confirmThirdPartyInventory: methodRow.confirmThirdPartyInventory,
+          monitorMode: methodRow.monitorMode,
+          useExperts: methodRow.useExperts,
+          useInternalAudit: methodRow.useInternalAudit,
+        };
+      })
+    );
+  };
+
   const handleMethodPlanBulkImport = (importedRows: MethodPlanRow[]) => {
     setInventoryMatrixRows((currentRows) => {
       const nextInventoryRows = mergeImportedLocationsIntoInventoryRows(currentRows, importedRows);
@@ -1181,7 +1291,12 @@ export default function PreWpJuly({ onBack, taskId }: PreWpJulyProps) {
     });
     setHasConfirmedKoicPush(true);
     setIsWorkpaperIntroCollapsed(true);
+    setIsMethodPlanPrepCollapsed(true);
     setIsPlanSetupCollapsed(true);
+    setActivePreWpJulyStage('understand');
+    window.requestAnimationFrame(() => {
+      inventorySectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
   };
 
   useEffect(() => {
@@ -1337,17 +1452,26 @@ export default function PreWpJuly({ onBack, taskId }: PreWpJulyProps) {
     };
   }, []);
 
+  const navigateToStage = (stage: PreWpJulyStage) => {
+    setActivePreWpJulyStage(stage);
+    const sectionRef =
+      stage === 'method'
+        ? methodPlanProgramSectionRef
+        : stage === 'understand'
+          ? inventorySectionRef
+          : planSectionRef;
+
+    window.requestAnimationFrame(() => {
+      sectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  };
+
   return (
-    <div className="space-y-8 px-3 sm:px-4 lg:px-8">
-      <div className="mb-4 flex items-start justify-between">
+    <div className="flex flex-col gap-8 px-3 sm:px-4 lg:px-8">
+      <div className="mb-4 flex items-start">
         <div>
           <h1 className="text-2xl font-bold leading-tight text-gray-900">1325146-Tech Solutions Demo & Training (CN)</h1>
           {/* <p className="mt-1 text-xs text-gray-500">任务 ID: {taskId} | 任务编码: R000009895379</p> */}
-        </div>
-        <div className="relative top-5 flex items-center">
-          <button className="flex items-center rounded bg-blue-600 px-4 py-1.5 text-sm text-white shadow-sm transition hover:bg-blue-700">
-            <Download size={14} className="mr-1.5" /> 导出底稿
-          </button>
         </div>
       </div>
 
@@ -1357,138 +1481,103 @@ export default function PreWpJuly({ onBack, taskId }: PreWpJulyProps) {
             className={cn(
               'flex items-center justify-between gap-4 pb-3',
               isWorkpaperHeaderPinned &&
-                'fixed inset-x-0 top-0 z-40 border-b border-gray-200 bg-white/95 px-2 py-2 shadow-sm backdrop-blur sm:px-4 lg:px-8'
+                'fixed inset-x-0 top-0 z-40 border-b border-white/30 bg-white/30 px-2 py-2 shadow-[0_8px_24px_rgba(15,23,42,0.08)] backdrop-blur-md backdrop-saturate-150 sm:px-4 lg:px-8'
             )}
           >
           <h2 className="shrink-0 border-l-[5px] border-blue-600 pl-4 text-2xl font-bold leading-9">存货工作底稿</h2>
-          <div className="flex min-w-0 items-center">
-            <PreWpJulyStepIndicator
-              currentStage={activePreWpJulyStage}
-              onStageClick={setActivePreWpJulyStage}
-            />
-          </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="relative space-y-4">
-        <div className="ml-4 flex items-center justify-between gap-4">
-          <h2 className="border-l-4 border-blue-600 pl-3 text-lg font-bold text-gray-900">引言</h2>
-          <button
-            type="button"
-            onClick={() => setIsWorkpaperIntroCollapsed((current) => !current)}
-            className="mr-1 inline-flex items-center gap-1 rounded border border-gray-200 bg-white px-2 py-1 text-[11px] font-medium text-gray-500 shadow-sm transition hover:border-blue-300 hover:text-blue-700"
-            aria-expanded={!isWorkpaperIntroCollapsed}
-          >
-            {isWorkpaperIntroCollapsed ? <ChevronDown size={12} /> : <ChevronUp size={12} />}
-            {isWorkpaperIntroCollapsed ? '展开' : '收起'}
+          <button className="flex items-center rounded bg-blue-600 px-4 py-1.5 text-sm text-white shadow-sm transition hover:bg-blue-700">
+            <Download size={14} className="mr-1.5" /> 导出底稿
           </button>
-        </div>
-        {!isWorkpaperIntroCollapsed && (
-          <div className="ml-4 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
-            <div className="space-y-5 p-6">
-              {[...rightColumnTopDetails, ...rightColumnBottomDetails].map((detail, index) => (
-                <div key={`${detail.label}-${index}`} className="flex items-start gap-3">
-                  <span className="w-40 shrink-0 text-gray-500">{detail.label}</span>
-                  <div className="min-w-0 flex-1">
-                    <span className="whitespace-pre-line text-gray-800">{detail.value || '-'}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
           </div>
-        )}
+        </div>
       </div>
 
-      {showFloatingSaveButton && (
-        <button
-          type="button"
-          onClick={handlePageSave}
-          className={cn(
-            'fixed right-10 top-24 z-[60] flex h-12 w-12 items-center justify-center rounded-full border text-xs font-medium backdrop-blur-sm transition-all duration-300 hover:scale-105 hover:bg-white/10 hover:shadow-[0_0_14px_rgba(37,99,235,0.1)] hover:ring-2 hover:ring-cyan-600/20',
-            inventoryStepsSaved
-              ? 'border-blue-600/75 bg-white/10 text-blue-700 hover:border-sky-200'
-              : 'border-blue-600/15 bg-white/40 text-blue-700 hover:border-sky-200/30'
-          )}
-        >
-          <Save size={20} strokeWidth={2} aria-hidden="true" />
-          <span className="sr-only">保存</span>
-        </button>
-      )}
+      <PreWpJulyCompactStepIndicator
+        currentStage={activePreWpJulyStage}
+        onStageClick={navigateToStage}
+        showSave={showFloatingSaveButton}
+        onSave={handlePageSave}
+        saved={inventoryStepsSaved}
+      />
 
-      {activePreWpJulyStage === 'understand' && (
-      <div ref={inventorySectionRef} className="space-y-4">
+      {(
+      <div ref={inventorySectionRef} className="order-2 -mt-4 scroll-mt-24 space-y-4">
         <div className="ml-4 flex items-center justify-between gap-4">
           <h2 className="border-l-4 border-blue-600 pl-3 text-lg font-bold">存货了解矩阵</h2>
         </div>
         <div className="ml-4 overflow-visible rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-          <TableFullscreenFrame
-            title="存货了解矩阵"
-            showFullscreenButton={!isInventoryPrepCollapsed}
-            headerActions={
-              <button
-                type="button"
-                onClick={() => setIsInventoryPrepCollapsed((current) => !current)}
-                className="inline-flex items-center gap-1 rounded border border-gray-200 bg-white px-3 py-1 text-[11px] font-medium text-gray-500 shadow-sm transition hover:border-blue-300 hover:text-blue-700"
-                aria-expanded={!isInventoryPrepCollapsed}
-              >
-                {isInventoryPrepCollapsed ? <ChevronDown size={12} /> : <ChevronUp size={12} />}
-                {isInventoryPrepCollapsed ? '展开' : '收起'}
-              </button>
-            }
-          >
-          <div className="overflow-x-auto rounded-lg">
-            <table className="w-full border-collapse text-left">
-              <thead>
-                <tr className="bg-gray-100 text-xs tracking-wider text-gray-600">
-                  <th className="w-24 border-b border-gray-200 px-4 py-2 font-medium">状态</th>
-                  <th className="min-w-[720px] border-b border-gray-200 px-4 py-2 font-medium">程序</th>
-                </tr>
-              </thead>
-              {!isInventoryPrepCollapsed && (
-                <tbody className="divide-y divide-gray-100">
-                  {inventoryMatrixPrepSteps.map((step) => {
-                    return (
-                      <React.Fragment key={step.id}>
-                        <tr className="transition-colors hover:bg-gray-50">
-                          <td className="px-4 pb-2 pt-6 align-top">
-                            <div className="flex items-start justify-center">
-                              <div
-                                className="mt-1.5 h-2.5 w-2.5 rounded-full transition-colors"
-                                style={{ backgroundColor: hasStepInputContent(step.id) ? '#0D92F8' : '#D1D5DB' }}
-                              />
-                            </div>
-                          </td>
-                          <td className="px-4 pb-2 pt-6 align-top">
-                            <StepProcedureCell step={step} />
-                          </td>
-                        </tr>
-                      </React.Fragment>
-                    );
-                  })}
-                </tbody>
-              )}
-            </table>
-          </div>
-          </TableFullscreenFrame>
           <InventoryMatrix
             embedded
             hideNoteLabels
             rows={inventoryMatrixRows}
             onRowsChange={handleInventoryMatrixRowsChange}
-            lockIdentityColumns={inventoryStepsSaved}
-            toolbarActions={
-              <div className="flex items-center gap-2">
+            onCreateTasks={() => methodPlanMatrixRef.current?.openKoicPushModal()}
+            onOpenLocationSettings={(rowId) =>
+              methodPlanMatrixRef.current?.openLocationSettings(rowId)
+            }
+            footerRightContent={
+              shouldShowSubmit ? (
                 <button
                   type="button"
-                  onClick={openInventoryBulkImport}
-                  className="inline-flex h-7 items-center rounded-md border border-blue-100 bg-blue-600 px-3 text-[12px] font-medium text-white transition hover:border-blue-300 hover:bg-blue-400 active:scale-105"
+                  onClick={() => methodPlanMatrixRef.current?.openKoicPushModal()}
+                  className="flex items-center rounded border border-gray-300 bg-blue-600 px-4 py-1.5 text-sm text-white shadow-sm transition hover:bg-gray-50"
                 >
-                  下载模板 | 导入
+                  创建程序
                 </button>
-              </div>
+              ) : null
+            }
+            lockIdentityColumns={inventoryStepsSaved}
+            toolbarActions={
+              <button
+                type="button"
+                onClick={openInventoryBulkImport}
+                className="inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-[11px] font-medium text-slate-600 transition hover:bg-slate-100 hover:text-[#00338D]"
+                title="下载模板或导入存货数据"
+              >
+                <Upload size={12} />
+                模板导入
+              </button>
             }
           />
+          {sampleChangeRows.length > 0 && (
+            <div className="mt-4 overflow-hidden rounded-lg border border-gray-200 bg-white">
+              <div className="border-b border-gray-200 px-4 py-3 text-sm font-semibold text-gray-800">
+                样本变更原因
+              </div>
+              <table className="w-full border-collapse text-left text-sm">
+                <thead>
+                  <tr className="bg-gray-100 text-xs tracking-wider text-gray-700">
+                    <th className="w-[180px] border-b border-gray-200 px-4 py-3 font-medium">
+                      所属公司名称
+                    </th>
+                    <th className="w-[240px] border-b border-gray-200 px-4 py-3 font-medium">
+                      受访单位名称
+                    </th>
+                    <th className="border-b border-gray-200 px-4 py-3 font-medium">
+                      对毕马威所选为监盘地点发生变动进行相关解释
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {sampleChangeRows.map((row) => (
+                    <tr key={`sample-change-${row.id}`} className="transition-colors hover:bg-gray-50">
+                      <td className="whitespace-pre-line px-4 py-4 align-top text-gray-800">
+                        {row.companyName || '-'}
+                      </td>
+                      <td className="whitespace-pre-line px-4 py-4 align-top text-gray-800">
+                        {row.intervieweeName || '-'}
+                      </td>
+                      <td className="px-4 py-4 align-top">
+                        <div className="whitespace-pre-line rounded border border-gray-100 bg-gray-50 px-3 py-2 text-sm leading-5 text-gray-700">
+                          {row.sampleChangeReason || '-'}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
           <div className="mt-4 flex items-center justify-end">
             {/* <button
               type="button"
@@ -1507,61 +1596,60 @@ export default function PreWpJuly({ onBack, taskId }: PreWpJulyProps) {
       </div>
       )}
 
-      {activePreWpJulyStage === 'understand' && (
-        <MethodPlanMatrix
-          ref={methodPlanMatrixRef}
-          rows={methodPlanRows}
-          onRowsChange={setMethodPlanRows}
-          onBulkImportRows={handleMethodPlanBulkImport}
-          showBulkImportButton={false}
-          renderTableContent={false}
-          bulkImportMode="locations"
-          hideNoteLabels
-        />
-      )}
-
-      {activePreWpJulyStage !== 'understand' && (
+      {(
       <>
-      <div className="ml-4 flex items-center justify-between gap-4">
-        <h2 className="border-l-4 border-blue-600 pl-3 text-lg font-bold text-gray-900">
-          {activePreWpJulyStage === 'method' ? '了解被审计单位的存货' : '确定项目组的存货监盘方法'}
-        </h2>
-        {activePreWpJulyStage === 'plan' && hasConfirmedKoicPush && isPlanSetupCollapsed && (
+      <div className="order-1 -mt-3 ml-4 flex items-center justify-between gap-4">
+        <div className="relative">
           <button
             type="button"
-            onClick={() => setIsPlanSetupCollapsed(false)}
-            className="mr-1 inline-flex items-center gap-1 rounded border border-gray-200 bg-white px-2 py-1 text-[11px] font-medium text-gray-500 shadow-sm transition hover:border-blue-300 hover:text-blue-700"
-            aria-label="展开表格"
+            onClick={() => setIsWorkpaperIntroCollapsed((current) => !current)}
+            className="absolute right-full top-[calc(65%+6px)] mr-1 -translate-y-1/2 whitespace-nowrap rounded px-2 py-0 text-[9px] font-medium text-slate-800 transition hover:bg-blue-50 hover:text-blue-800 focus:outline-none focus:ring-1 focus:ring-blue-200"
+            aria-expanded={!isWorkpaperIntroCollapsed}
+            aria-label={isWorkpaperIntroCollapsed ? '展开引言' : '收起引言'}
+            title={isWorkpaperIntroCollapsed ? '展开引言' : '收起引言'}
           >
-            <ChevronDown size={12} />
-            展开表格
+            <span className="flex flex-col items-center leading-[11px]">
+              <span>引</span>
+              <span>言</span>
+            </span>
           </button>
-        )}
+          <h2 className="border-l-4 border-blue-600 pl-3 text-lg font-bold text-gray-900">
+            了解被审计单位的存货
+          </h2>
+        </div>
       </div>
+      {!isWorkpaperIntroCollapsed && (
+        <div className="order-1 ml-4 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+          <div className="space-y-5 p-6">
+            {[...rightColumnTopDetails, ...rightColumnBottomDetails].map((detail, index) => (
+              <div key={`${detail.label}-${index}`} className="flex items-start gap-3">
+                <span className="w-40 shrink-0 text-gray-500">{detail.label}</span>
+                <div className="min-w-0 flex-1">
+                  <span className="whitespace-pre-line text-gray-800">{detail.value || '-'}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
       <div
         ref={methodPlanProgramSectionRef}
-        className={cn(
-          'space-y-4',
-          activePreWpJulyStage === 'plan' && isPlanSetupCollapsed && 'hidden'
-        )}
-        aria-hidden={activePreWpJulyStage === 'plan' && isPlanSetupCollapsed}
+        className="relative order-1 -mt-4 scroll-mt-24 space-y-4"
       >
+        <button
+          type="button"
+          onClick={() => setIsMethodPlanPrepCollapsed((current) => !current)}
+          className="absolute right-0 top-0 z-10 -translate-y-[calc(20%+1px)] inline-flex items-center gap-1 rounded border border-gray-200 bg-white px-3 py-1 text-[11px] font-medium text-gray-500 shadow-sm transition hover:border-blue-300 hover:text-blue-700"
+          aria-expanded={!isMethodPlanPrepCollapsed}
+        >
+          {isMethodPlanPrepCollapsed ? <ChevronDown size={12} /> : <ChevronUp size={12} />}
+          {isMethodPlanPrepCollapsed ? '展开' : '收起'}
+        </button>
+        {!isMethodPlanPrepCollapsed && (
         <div className="ml-4 overflow-hidden rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
           <div className="overflow-visible rounded-lg border border-gray-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
             <TableFullscreenFrame
               title="了解被审计单位的存货"
-              showFullscreenButton={!isMethodPlanPrepCollapsed}
-              headerActions={
-                <button
-                  type="button"
-                  onClick={() => setIsMethodPlanPrepCollapsed((current) => !current)}
-                  className="inline-flex items-center gap-1 rounded border border-gray-200 bg-white px-3 py-1 text-[11px] font-medium text-gray-500 shadow-sm transition hover:border-blue-300 hover:text-blue-700"
-                  aria-expanded={!isMethodPlanPrepCollapsed}
-                >
-                  {isMethodPlanPrepCollapsed ? <ChevronDown size={12} /> : <ChevronUp size={12} />}
-                  {isMethodPlanPrepCollapsed ? '展开' : '收起'}
-                </button>
-              }
             >
             <div className="overflow-x-auto rounded-lg">
               <table className="w-full border-collapse text-left">
@@ -1570,16 +1658,97 @@ export default function PreWpJuly({ onBack, taskId }: PreWpJulyProps) {
                     <th className="w-24 border-b border-gray-200 px-4 py-2 font-medium">状态</th>
                     <th className="min-w-[720px] border-b border-gray-200 px-4 py-2 font-medium">
                       <span>程序</span>
-                      {activePreWpJulyStage === 'method' && (
-                        <span className="ml-3 inline-flex items-center gap-1.5 text-[10px] font-normal tracking-normal text-gray-400">
-                          <span className="font-medium">KAEG</span>
-                          <span>3.1 业务流程 - 了解有关情况</span>
-                        </span>
-                      )}
+                      <span className="ml-3 inline-flex items-center gap-1.5 text-[10px] font-normal tracking-normal text-gray-400">
+                        <span className="font-medium">KAEG</span>
+                        <span>3.1 业务流程 - 了解有关情况</span>
+                      </span>
                     </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
+                  <tr className="bg-slate-50/40">
+                    <td className="px-4 py-4 align-top">
+                      <div className="flex justify-center pt-1.5">
+                        <div
+                          className="h-2.5 w-2.5 rounded-full"
+                          style={{
+                            backgroundColor:
+                              entityRiskLevel && entityIndustry && entityIndustrySegment.trim() && interimInventoryTotal.trim() && yearEndInventoryTotal.trim()
+                                ? '#0D92F8'
+                                : '#D1D5DB',
+                          }}
+                        />
+                      </div>
+                    </td>
+                    <td className="px-4 py-4 align-top">
+                      <div className="mb-3 text-sm font-semibold text-gray-800">
+                        记录被审计单位的基本信息及相关存货金额
+                      </div>
+                      <div className="grid grid-cols-2 gap-x-6 gap-y-2.5 text-xs">
+                        <div className="col-span-2 grid grid-cols-3 gap-4">
+                          <label className="grid min-w-0 grid-cols-[84px_minmax(0,1fr)] items-center gap-2">
+                            <span className="whitespace-nowrap text-gray-600">存货风险等级</span>
+                            <select
+                              value={entityRiskLevel}
+                              onChange={(event) => setEntityRiskLevel(event.target.value)}
+                              className="h-8 min-w-0 rounded border border-gray-200 bg-white px-2 text-xs text-gray-700 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                              aria-label="选择被审计单位存货的风险等级"
+                            >
+                              <option value="">请选择</option>
+                              <option value="高">高</option>
+                              <option value="中">中</option>
+                              <option value="低">低</option>
+                            </select>
+                          </label>
+                          <label className="grid min-w-0 grid-cols-[56px_minmax(0,1fr)] items-center gap-2">
+                            <span className="whitespace-nowrap text-gray-600">所属行业</span>
+                            <select
+                              value={entityIndustry}
+                              onChange={(event) => setEntityIndustry(event.target.value)}
+                              className="h-8 min-w-0 rounded border border-gray-200 bg-white px-2 text-xs text-gray-700 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                              aria-label="选择被审计单位所属行业"
+                            >
+                              <option value="">请选择</option>
+                              {['房地产', '零售', '化工', '科技', '其他'].map((industry) => (
+                                <option key={industry} value={industry}>{industry}</option>
+                              ))}
+                            </select>
+                          </label>
+                          <label className="grid min-w-0 grid-cols-[56px_minmax(0,1fr)] items-center gap-2">
+                            <span className="whitespace-nowrap text-gray-600">行业细分</span>
+                            <input
+                              type="text"
+                              value={entityIndustrySegment}
+                              onChange={(event) => setEntityIndustrySegment(event.target.value)}
+                              className="h-8 min-w-0 rounded border border-gray-200 bg-white px-2 text-xs text-gray-700 outline-none placeholder:text-gray-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                              placeholder="请输入"
+                              aria-label="填写被审计单位行业细分"
+                            />
+                          </label>
+                        </div>
+                        <label className="grid grid-cols-[150px_minmax(0,1fr)] items-center gap-2">
+                          <span className="text-gray-600">本期预审阶段存货总额</span>
+                          <input
+                            type="text"
+                            value={interimInventoryTotal}
+                            onChange={(event) => setInterimInventoryTotal(event.target.value)}
+                            className="h-8 w-1/2 rounded border border-gray-200 bg-white px-2 text-xs text-gray-700 outline-none placeholder:text-gray-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                            placeholder="请输入金额"
+                          />
+                        </label>
+                        <label className="grid grid-cols-[120px_minmax(0,1fr)] items-center gap-2">
+                          <span className="text-gray-600">本期期末存货总额</span>
+                          <input
+                            type="text"
+                            value={yearEndInventoryTotal}
+                            onChange={(event) => setYearEndInventoryTotal(event.target.value)}
+                            className="h-8 w-1/2 rounded border border-gray-200 bg-white px-2 text-xs text-gray-700 outline-none placeholder:text-gray-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                            placeholder="请输入金额"
+                          />
+                        </label>
+                      </div>
+                    </td>
+                  </tr>
                   {!isMethodPlanPrepCollapsed && visibleMethodPlanPrepSteps.map((step) => {
                     return (
                       <React.Fragment key={`method-plan-prep-${step.id}`}>
@@ -1594,7 +1763,7 @@ export default function PreWpJuly({ onBack, taskId }: PreWpJulyProps) {
                           </td>
                           <td className="px-4 pb-2 pt-6 align-top">
                             <StepProcedureCell step={step}>
-                              {step.id === 2 && isStepTwoConfirmed && (
+                              {step.id === 1 && isStepTwoConfirmed && (
                                 <button
                                   type="button"
                                   onClick={() => {
@@ -1612,7 +1781,7 @@ export default function PreWpJuly({ onBack, taskId }: PreWpJulyProps) {
                                   {isStepTwoCollapsed ? '展开审计指引' : '收起审计指引'}
                                 </button>
                               )}
-                              {[3, 4, 8].includes(step.id) && (
+                              {[3, 4, 7, 8].includes(step.id) && (
                                 <div>
                                   <label
                                     className="inline-flex cursor-pointer items-center gap-2 text-xs font-medium text-gray-600 transition hover:text-gray-900"
@@ -1644,7 +1813,7 @@ export default function PreWpJuly({ onBack, taskId }: PreWpJulyProps) {
                             </StepProcedureCell>
                           </td>
                         </tr>
-                        {step.id === 2 && !isStepTwoCollapsed && (
+                        {step.id === 1 && !isStepTwoCollapsed && (
                           <tr className="bg-white">
                             <td className="px-4 pb-6 align-top" />
                             <td className="px-4 pb-6 align-top">
@@ -1660,25 +1829,26 @@ export default function PreWpJuly({ onBack, taskId }: PreWpJulyProps) {
                                   scrollbarWidth: 'none',
                                   height: stepTwoCarouselHeight ? `${stepTwoCarouselHeight}px` : undefined,
                                 }}
-                                aria-label="第二题问卷与审计指引卡片"
+                                aria-label="存货性质问卷与审计指引卡片"
                               >
                                 <section
                                   ref={stepTwoQuestionCardRef}
                                   className="relative w-full shrink-0 snap-start"
-                                  aria-label="第二题卡片一"
+                                  aria-label="存货性质问卷卡片一"
                                 >
                                   <ol
                                     className="space-y-6 rounded-md border border-gray-200 bg-gray-50/60 px-4 py-4"
-                                    aria-label="问题 2 的分题"
+                                    aria-label="存货性质问卷的分题"
                                   >
                                     {PRE_WP_JULY_STEP_TWO_SUBQUESTIONS.map((subquestion) => {
                                   const hasOptions = 'selection' in subquestion && 'options' in subquestion;
                                   const isSingleChoice = hasOptions && subquestion.selection === 'single';
+                                  const subquestionNumber = subquestion.id.split('.').at(-1);
 
                                   return (
                                     <li key={subquestion.id} className="text-sm leading-6 text-gray-700">
                                       <div className="grid w-[70%] min-w-[700px] max-w-full grid-cols-[auto_minmax(0,1fr)] items-start gap-x-2 gap-y-2">
-                                        <span className="shrink-0 font-semibold text-[#00338D]">{subquestion.id}</span>
+                                        <span className="shrink-0 font-semibold text-[#00338D]">{subquestionNumber}</span>
                                         <span>{subquestion.text}</span>
                                         {isSingleChoice && (
                                           <div className="col-start-2 row-start-2 mt-1 min-w-0">
@@ -1748,7 +1918,7 @@ export default function PreWpJuly({ onBack, taskId }: PreWpJulyProps) {
                                 <section
                                   ref={stepTwoGuidanceCardRef}
                                   className="relative ml-4 w-full shrink-0 snap-start overflow-hidden rounded-md border border-gray-200 bg-white"
-                                  aria-label="第二题卡片二"
+                                  aria-label="存货性质问卷卡片二"
                                 >
                                   <StepTwoGuidanceCard
                                     selections={stepTwoSelections}
@@ -1770,7 +1940,7 @@ export default function PreWpJuly({ onBack, taskId }: PreWpJulyProps) {
                               )}
                               </div>
                               {isStepTwoConfirmed && (
-                                <div className="mt-3 flex items-center justify-center gap-2" aria-label="第二题卡片分页">
+                                <div className="mt-3 flex items-center justify-center gap-2" aria-label="存货性质问卷卡片分页">
                                   {([0, 1] as const).map((cardIndex) => (
                                     <button
                                       key={cardIndex}
@@ -1791,7 +1961,7 @@ export default function PreWpJuly({ onBack, taskId }: PreWpJulyProps) {
                             </td>
                           </tr>
                         )}
-                        {[1, 3, 4, 5, 6, 8].includes(step.id) && (
+                        {[2, 3, 4, 5, 6, 7, 8].includes(step.id) && (
                           <tr className="bg-white">
                             <td className="px-4 pb-6 align-top" />
                             <td className="px-4 pb-6 align-top">
@@ -1802,9 +1972,9 @@ export default function PreWpJuly({ onBack, taskId }: PreWpJulyProps) {
                                 相关信息
                               </label> */}
                               <textarea
-                                id={`method-plan-step-note-${step.id}`}
+                                id={step.id === 7 ? 'inventory-step-note-7' : `method-plan-step-note-${step.id}`}
                                 value={methodPlanStepNotes[step.id] ?? ''}
-                                placeholder={PRE_WP_JULY_STEP_NOTE_PLACEHOLDERS[step.id]}
+                                placeholder={step.id === 7 ? '请输入相关信息' : PRE_WP_JULY_STEP_NOTE_PLACEHOLDERS[step.id]}
                                 onChange={(event) =>
                                   setMethodPlanStepNotes((current) => ({
                                     ...current,
@@ -1872,82 +2042,41 @@ export default function PreWpJuly({ onBack, taskId }: PreWpJulyProps) {
             </TableFullscreenFrame>
           </div>
 
-          {activePreWpJulyStage === 'plan' && methodFileName && (
+          {methodFileName && (
             <p className="mt-3 text-xs text-gray-500">已上传文件: {methodFileName}</p>
           )}
           <MethodPlanMatrix
             ref={methodPlanMatrixRef}
             rows={methodPlanRows}
-            onRowsChange={setMethodPlanRows}
+            onRowsChange={handleMethodPlanRowsChange}
             onBulkImportRows={handleMethodPlanBulkImport}
             showBulkImportButton={false}
-            renderTableContent={activePreWpJulyStage === 'plan'}
-            bulkImportMode="methodPlan"
+            renderTableContent={false}
+            bulkImportMode="locations"
             onKoicPushConfirm={handleKoicPushConfirm}
             hideNoteLabels
           />
-          {activePreWpJulyStage === 'plan' && sampleChangeRows.length > 0 && (
-            <div className="mt-4 overflow-hidden rounded-lg border border-gray-200 bg-white">
-              <div className="border-b border-gray-200 px-4 py-3 text-sm font-semibold text-gray-800">
-                样本变更原因
-              </div>
-              <table className="w-full border-collapse text-left text-sm">
-                <thead>
-                  <tr className="bg-gray-100 text-xs tracking-wider text-gray-700">
-                    <th className="w-[180px] border-b border-gray-200 px-4 py-3 font-medium">
-                      所属公司名称
-                    </th>
-                    <th className="w-[240px] border-b border-gray-200 px-4 py-3 font-medium">
-                      受访单位名称
-                    </th>
-                    <th className="border-b border-gray-200 px-4 py-3 font-medium">
-                      对毕马威所选为监盘地点发生变动进行相关解释
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {sampleChangeRows.map((row) => (
-                    <tr key={`sample-change-${row.id}`} className="transition-colors hover:bg-gray-50">
-                      <td className="whitespace-pre-line px-4 py-4 align-top text-gray-800">
-                        {row.companyName || '-'}
-                      </td>
-                      <td className="whitespace-pre-line px-4 py-4 align-top text-gray-800">
-                        {row.intervieweeName || '-'}
-                      </td>
-                      <td className="px-4 py-4 align-top">
-                        <div className="whitespace-pre-line rounded border border-gray-100 bg-gray-50 px-3 py-2 text-sm leading-5 text-gray-700">
-                          {row.sampleChangeReason || '-'}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
         </div>
+        )}
       </div>
 
-      {activePreWpJulyStage === 'plan' && hasConfirmedKoicPush && (
-      <div className="space-y-4">
+      <div ref={planSectionRef} className="order-3 ml-4 scroll-mt-24">
+        {/* 确定项目组的存货监盘方法 header intentionally hidden. */}
+      </div>
+
+      {hasConfirmedKoicPush && (
+      <div className="order-3 space-y-4">
         <div className="ml-4 flex flex-wrap items-center justify-between gap-3 border-l-4 border-blue-600 pl-3">
           <div className="flex flex-wrap items-center gap-5">
-          <h2 className="text-lg font-bold">选择存货监盘方法</h2>
+          <h2 className="text-lg font-bold">项目组选定的存货监盘方法</h2>
           <h3 className="text-sm text-blue-400">
             *开启毕马威打卡星存货盘点模块前，须完成本页面中所有程序步骤。
           </h3>
           </div>
-          <div className="flex items-center gap-4">
-            {shouldShowSubmit && (
-              <button className="flex items-center rounded bg-blue-600 border border-gray-300 px-4 py-1.5 text-sm text-white shadow-sm transition hover:bg-gray-50">
-            创建程序
-          </button>
-            )}
-          </div>
         </div>
 
         <div className="ml-4 overflow-visible rounded-lg border border-gray-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
-          <TableFullscreenFrame title="选择存货监盘方法">
+          <TableFullscreenFrame title="项目组选定的存货监盘方法">
           <div className="overflow-x-auto rounded-lg">
             <table className="w-full border-collapse text-left">
               <thead>

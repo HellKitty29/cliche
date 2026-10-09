@@ -6,7 +6,15 @@
 import React, { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Minimize2, Pencil, Search, TriangleAlert } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import { allowsThirdPartyEvidence, normalizeThirdPartyEvidence, getInventoryProcedureDecision, getPublishableInventoryRows } from '../utils/inventoryProcedureRules';
+import {
+  allowsThirdPartyEvidence,
+  INVENTORY_PROCEDURE_METHOD_LABELS,
+  normalizeThirdPartyEvidence,
+  getInventoryProcedureDecision,
+  getInventoryProcedureDisplayGroupIds,
+  getPublishableInventoryRows,
+  isInventorySampleExcluded,
+} from '../utils/inventoryProcedureRules';
 import { parseChineseAddress } from '../utils/addressParser';
 
 export type MethodPlanRow = {
@@ -55,6 +63,8 @@ type MethodPlanMatrixProps = {
 
 export type MethodPlanMatrixHandle = {
   openBulkImportModal: () => void;
+  openKoicPushModal: () => void;
+  openLocationSettings: (rowId: string) => void;
 };
 
 const SELECT_PLACEHOLDER = '从下拉菜单选择';
@@ -192,20 +202,13 @@ const METHOD_PLAN_IMPORT_HEADER_ITEMS = [
 ] as const;
 
 const METHOD_PLAN_KOIC_GROUPS = [
-  { id: 1, label: '1. 采取控制测试方案或双重目的的方案对管理层的循环盘点实施程序' },
-  { id: 2, label: '2. 采取实质性方案、控制测试方案或双重目的的方案对管理层的全面实地盘点实施程序' },
-  { id: 3, label: '3. 就存放于第三方地点的存货获取证据' },
-  {
-    id: 4,
-    label: '4. 存货盘点-独立盘点（不可预见情形仅适用 4.1、4.4、4.5）',
-  },
-  { id: 5, label: '5. 当项目组因不可预见的情况而无法在管理层存货盘点现场实施监盘时，实施的程序' },
-  { id: 6, label: '6. 如果在存货盘点现场实施存货监盘不可行时，实施的替代程序' },
-  {
-    id: 7,
-    label:
-      '7. 仅限于 ISA 项目，当与存货数量和状况有关的风险未被评估为重大错报风险但存货对财务报表重要时，参加管理层存货盘点时实施的程序',
-  },
+  { id: 1, label: INVENTORY_PROCEDURE_METHOD_LABELS[1] },
+  { id: 2, label: INVENTORY_PROCEDURE_METHOD_LABELS[2] },
+  { id: 3, label: INVENTORY_PROCEDURE_METHOD_LABELS[3] },
+  { id: 4, label: INVENTORY_PROCEDURE_METHOD_LABELS[4] },
+  { id: 5, label: INVENTORY_PROCEDURE_METHOD_LABELS[5] },
+  { id: 6, label: INVENTORY_PROCEDURE_METHOD_LABELS[6] },
+  { id: 7, label: INVENTORY_PROCEDURE_METHOD_LABELS[7] },
 ] as const;
 
 const headerBlue =
@@ -1235,7 +1238,11 @@ const MethodPlanMatrix = forwardRef<MethodPlanMatrixHandle, MethodPlanMatrixProp
       }, 700);
     };
 
-    useImperativeHandle(ref, () => ({ openBulkImportModal }));
+    useImperativeHandle(ref, () => ({
+      openBulkImportModal,
+      openKoicPushModal: () => setIsKoicPushModalOpen(true),
+      openLocationSettings: (rowId: string) => openHomogeneousLocationPopup(null, rowId),
+    }));
 
     useEffect(() => {
       if (isBulkImportOpen) {
@@ -1299,7 +1306,9 @@ const MethodPlanMatrix = forwardRef<MethodPlanMatrixHandle, MethodPlanMatrixProp
     const removedBulkImportHeaders = bulkImportHeaderItems.filter(
       (item) => !activeBulkImportHeaderIds.includes(item.id)
     );
-    const koicPushAnomalies = rows.flatMap(getMethodPlanAnomalies);
+    const taskEligibleRows = rows.filter((row) => !isInventorySampleExcluded(row.selectedAsSample));
+    const sampleExcludedLocationCount = rows.length - taskEligibleRows.length;
+    const koicPushAnomalies = taskEligibleRows.flatMap(getMethodPlanAnomalies);
     const selectableKoicAnomalies = koicPushAnomalies.filter((anomaly) => !anomaly.blocking);
     const selectedKoicWarningCount = selectableKoicAnomalies.filter((anomaly) => selectedKoicWarningIds.includes(anomaly.id)).length;
     const allKoicWarningsSelected = selectableKoicAnomalies.length > 0 && selectedKoicWarningCount === selectableKoicAnomalies.length;
@@ -1310,9 +1319,9 @@ const MethodPlanMatrix = forwardRef<MethodPlanMatrixHandle, MethodPlanMatrixProp
     }, [rows, isKoicPushModalOpen]);
     const koicPushGroups = METHOD_PLAN_KOIC_GROUPS.map((group) => ({
       ...group,
-      rows: rows.filter(
+      rows: taskEligibleRows.filter(
         (row) =>
-          getInventoryProcedureDecision(row).groupIds.includes(group.id)
+          getInventoryProcedureDisplayGroupIds(getInventoryProcedureDecision(row).groupIds).includes(group.id)
       ),
     }));
     const toggleKoicGroupExpanded = (groupId: number) => {
@@ -2223,6 +2232,16 @@ const MethodPlanMatrix = forwardRef<MethodPlanMatrixHandle, MethodPlanMatrixProp
                   关闭
                 </button>
               </div>
+
+              {sampleExcludedLocationCount > 0 && (
+                <div
+                  className="mt-4 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs leading-5 text-amber-800"
+                  role="status"
+                >
+                  <TriangleAlert size={15} className="mt-0.5 shrink-0 text-amber-600" aria-hidden="true" />
+                  <span>存在未被选为盘点对象的地点，这些地点不会发布为任务。</span>
+                </div>
+              )}
 
               <div className="mt-4 space-y-2">
                 {koicPushGroups.map((group) => {

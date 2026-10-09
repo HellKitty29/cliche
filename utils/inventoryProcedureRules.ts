@@ -7,6 +7,28 @@ export type ProcedureInput = {
 
 export type ProcedureWarning = { code: string; warning: string; blocking: boolean };
 
+export const INVENTORY_PROCEDURE_METHOD_LABELS: Readonly<Record<number, string>> = {
+  1: '存货盘点-循环盘点',
+  2: '存货盘点-全面实地盘点',
+  3: '盘点-第三方地点',
+  4: '存货盘点-独立盘点',
+  5: '存货盘点-无法现场实施监盘的情形 & 独立盘点',
+  6: '存货盘点-实地存货监盘不可行',
+  7: '存货盘点-仅限于未识别出重大错报风险的ISA项目',
+};
+
+export function getInventoryProcedureDisplayGroupIds(groupIds: readonly number[]) {
+  return groupIds.includes(5)
+    ? groupIds.filter((groupId) => groupId !== 4)
+    : groupIds;
+}
+
+export function getInventoryProcedureDisplayLabels(groupIds: readonly number[]) {
+  return getInventoryProcedureDisplayGroupIds(groupIds)
+    .map((groupId) => INVENTORY_PROCEDURE_METHOD_LABELS[groupId])
+    .filter((label): label is string => Boolean(label));
+}
+
 const has = (value: string, ...terms: string[]) => terms.some((term) => value.includes(term));
 
 export function allowsThirdPartyEvidence(auditApproach: string) {
@@ -19,14 +41,20 @@ export function normalizeThirdPartyEvidence<T extends ProcedureInput>(row: T): T
     : { ...row, confirmThirdPartyInventory: '否' };
 }
 
-export function getPublishableInventoryRows<T extends ProcedureInput & { id: string }>(
+export function isInventorySampleExcluded(selectedAsSample?: string) {
+  const normalizedValue = (selectedAsSample ?? '').trim().toLowerCase();
+  return normalizedValue === 'no' || normalizedValue.includes('否');
+}
+
+export function getPublishableInventoryRows<T extends ProcedureInput & { id: string; selectedAsSample?: string }>(
   rows: T[],
   selectedWarningIds: readonly string[],
 ): T[] {
   const selected = new Set(selectedWarningIds);
   return rows.filter((row) => {
     const decision = getInventoryProcedureDecision(row);
-    return !decision.blocked && decision.groupIds.length > 0 &&
+    return !isInventorySampleExcluded(row.selectedAsSample) &&
+      !decision.blocked && decision.groupIds.length > 0 &&
       decision.warnings.every((warning) => selected.has(`${row.id}-${warning.code}`));
   });
 }
