@@ -4,6 +4,7 @@
  */
 
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { Tooltip } from 'antd';
 import {
   ArrowDownWideNarrow,
   ArrowLeft,
@@ -38,6 +39,7 @@ export type InventoryMatrixRow = {
   intervieweeName: string;
   selectedAsSample: string;
   category: string;
+  otherCharacteristics?: string;
   priorBalance: string;
   currentInterimStage: string;
   priorShare: string;
@@ -76,9 +78,10 @@ type InventoryMatrixProps = {
   onRowsChange?: (rows: InventoryMatrixRow[]) => void;
   onCreateTasks?: () => void;
   onOpenLocationSettings?: (rowId: string) => void;
+  createdTaskRowIds?: readonly string[];
 };
 
-type InventoryMatrixView = 'balance' | 'management' | 'monitoring' | 'arrangements' | 'all';
+type InventoryMatrixView = 'balance' | 'management' | 'monitoring' | 'all';
 type SampleSelectionFilter = 'all' | 'yes' | 'no';
 type BulkEditableInventoryField =
   | 'endingBalanceConfirmation'
@@ -101,20 +104,12 @@ type InventoryAmountSort = {
 } | null;
 const INVENTORY_PAGE_SIZE_OPTIONS = [15, 30, 50] as const;
 const INVENTORY_WEB_AMOUNT_SCALE = 0.000001;
-const ALL_VIEW_TABLE_WIDTH = 2811;
-const ALL_VIEW_SCROLL_COLUMN_WIDTHS = [
-  101, 46, 54, 88, 46, 92, 46, 54, 92, 46,
-  120, 150, 125, 170, 82, 92,
-  105, 105, 170, 72,
-  155, 125, 145,
-  120,
-] as const;
+const compactColumnWidth = (width: number) => Math.round(width * 0.9);
 const SELECT_PLACEHOLDER = '从下拉菜单选择';
 const INVENTORY_MATRIX_VIEWS: Array<{ value: InventoryMatrixView; label: string }> = [
-  { value: 'balance', label: '存货余额' },
+  { value: 'balance', label: '存货构成' },
   { value: 'management', label: '存货管理方式' },
   { value: 'monitoring', label: '存货监盘方法' },
-  { value: 'arrangements', label: '其他安排' },
   { value: 'all', label: '显示全部' },
 ];
 
@@ -123,9 +118,10 @@ const ENDING_BALANCE_CONFIRMATION_OPTIONS = [
   '期末存货余额通过存货出入库和移动的记录来确认',
   '期末存货余额通过期末实施的实地盘点结果来确定',
 ];
-const YES_NO_OPTIONS = ['否', '是'];
-const ATTENDANCE_DAY_OPTIONS = ['是', INDEPENDENT_ATTENDANCE_VALUE];
+const YES_NO_OPTIONS = ['', '否', '是'];
+const ATTENDANCE_DAY_OPTIONS = ['', '是', INDEPENDENT_ATTENDANCE_VALUE];
 const ATTENDANCE_FEASIBILITY_OPTIONS = [
+  '',
   '是',
   '否，存在因不可预见的情况，而无法现场实施监盘的情形',
   '否，存货盘点现场实施存货监盘不可行',
@@ -174,7 +170,7 @@ const BULK_EDIT_FIELD_CONFIGS: Array<{
   { field: 'plannedAttendancePrimary', label: '存货所在地址是否可实施监盘', side: 'right', options: ATTENDANCE_FEASIBILITY_OPTIONS },
   { field: 'plannedAttendanceSecondary', label: '项目组前往当日，客户是否开展盘点', side: 'right', options: ATTENDANCE_DAY_OPTIONS },
   { field: 'auditApproach', label: '项目组就监盘而计划的审计方案', side: 'right', options: AUDIT_APPROACH_OPTIONS },
-  { field: 'sampleQuantity', label: '样本数量', side: 'right' },
+  { field: 'sampleQuantity', label: '抽盘数量', side: 'right' },
 ];
 
 const EMPTY_BULK_EDIT_VALUES: Record<BulkEditableInventoryField, string> = {
@@ -187,7 +183,7 @@ const EMPTY_BULK_EDIT_VALUES: Record<BulkEditableInventoryField, string> = {
   sampleQuantity: '',
 };
 
-const SAMPLE_SELECTION_OPTIONS = ['是', '否'];
+const SAMPLE_SELECTION_OPTIONS = ['', '是', '否'];
 const MIXED_COUNT_METHOD_EXPLANATION =
   '在某些情况下，被审计单位可能对部分存货进行循环盘点，而对剩余存货进行实地全盘。';
 
@@ -215,8 +211,9 @@ export const createInventoryMatrixRow = (id: string): InventoryMatrixRow => ({
   location: '',
   companyName: '',
   intervieweeName: '',
-  selectedAsSample: '是',
+  selectedAsSample: '',
   category: '',
+  otherCharacteristics: '',
   priorBalance: '',
   currentInterimStage: '',
   priorShare: '',
@@ -226,21 +223,21 @@ export const createInventoryMatrixRow = (id: string): InventoryMatrixRow => ({
   finalPlannedBalance: '',
   finalShare: '',
   finalChange: '',
-  endingBalanceConfirmation: ENDING_BALANCE_CONFIRMATION_OPTIONS[0],
-  systemType: '永续盘存系统',
-  thirdPartyStorage: '否',
-  inventoryCountPlan: INVENTORY_COUNT_PLAN_OPTIONS[0],
-  countMethod: '在期末完成盘点',
-  useExpert: '否',
-  plannedAttendancePrimary: '是',
-  plannedAttendanceSecondary: '是',
+  endingBalanceConfirmation: '',
+  systemType: '',
+  thirdPartyStorage: '',
+  inventoryCountPlan: '',
+  countMethod: '',
+  useExpert: '',
+  plannedAttendancePrimary: '',
+  plannedAttendanceSecondary: '',
   auditApproach: SELECT_PLACEHOLDER,
   sampleQuantity: '',
   confirmedInventoryMethod: SELECT_PLACEHOLDER,
-  confirmThirdPartyInventory: '否',
+  confirmThirdPartyInventory: '',
   monitorMode: SELECT_PLACEHOLDER,
-  useExperts: '否',
-  useInternalAudit: '否',
+  useExperts: '',
+  useInternalAudit: '',
   sampleChangeReason: '',
 });
 
@@ -253,13 +250,13 @@ const AMOUNT_FIELDS: Array<keyof InventoryMatrixRow> = [
 ];
 
 const headerCellClassName =
-  "border border-slate-300 bg-[#F1F6FD] px-2 py-1 text-center font-['Microsoft_YaHei'] text-[11px] font-bold leading-[1.15] text-gray-700";
+  "border border-slate-300 bg-[#F1F6FD] px-2 py-1 text-center font-['Microsoft_YaHei'] text-[13px] font-bold leading-[1.15] text-gray-700";
 
 const lightHeaderCellClassName =
-  "border border-slate-300 bg-[#F1F6FD] px-2 py-1 text-center font-['Microsoft_YaHei'] text-[11px] font-bold leading-[1.15] text-[#1f1f1f]";
+  "border border-slate-300 bg-[#F1F6FD] px-2 py-1 text-center font-['Microsoft_YaHei'] text-[13px] font-bold leading-[1.15] text-[#1f1f1f]";
 
 const greenHeaderCellClassName =
-  "border border-slate-300 bg-[#F1F6FD] px-2 py-1 text-center font-['Microsoft_YaHei'] text-[11px] font-bold leading-[1.15] text-black";
+  "border border-slate-300 bg-[#F1F6FD] px-2 py-1 text-center font-['Microsoft_YaHei'] text-[13px] font-bold leading-[1.15] text-black";
 
 const bodyCellClassName =
   'border border-slate-300 bg-white p-0 align-middle text-center text-[11px] leading-[1.1] text-[#1f1f1f]';
@@ -275,12 +272,52 @@ const amountInputClassName =
 
 const selectClassName =
   'h-[21px] w-full appearance-none border-0 bg-transparent px-2 text-[11px] text-[#1f1f1f] outline-none';
+const yesNoSelectClassName =
+  'h-[21px] w-full appearance-none border-0 bg-transparent px-2 text-sm text-[#1f1f1f] outline-none';
 
 const calculatedCellClassName =
   'border border-slate-300 bg-black px-2 py-1 align-middle text-center text-[11px] font-semibold text-white';
 
 function CenteredLeftHeaderText({ children }: { children: React.ReactNode }) {
   return <span className="inline-block text-left">{children}</span>;
+}
+
+// Bound cell content so changing the visible fields cannot change row heights.
+function StableMatrixRow({ children, height = 32, ...props }: React.ComponentProps<'tr'> & { height?: number }) {
+  const wrapCells = (nodes: React.ReactNode): React.ReactNode => React.Children.map(nodes, (node) => {
+    if (!React.isValidElement<{ children?: React.ReactNode; style?: React.CSSProperties }>(node)) return node;
+    if (node.type === React.Fragment) return React.cloneElement(node, {}, wrapCells(node.props.children));
+    if (node.type !== 'td' && node.type !== 'th') return node;
+    return React.cloneElement(node, { style: { ...node.props.style, height, paddingTop: 0, paddingBottom: 0 } },
+      <div className="flex w-full flex-col justify-center overflow-hidden" style={{ height: height - 1 }}>
+        <div className="max-h-full shrink-0 overflow-hidden">{node.props.children}</div>
+      </div>);
+  });
+  return <tr {...props}>{wrapCells(children)}</tr>;
+}
+
+function InventoryMatrixScrollArea({
+  children,
+  onScroll,
+  onWheel,
+}: {
+  children: React.ReactNode;
+  onScroll: React.UIEventHandler<HTMLDivElement>;
+  onWheel: (event: WheelEvent) => void;
+}) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const container = scrollRef.current;
+    if (!container) return;
+    // React's delegated wheel listener is passive; use a native listener so
+    // preventDefault also stops page scrolling at the table's left/right edges.
+    container.addEventListener('wheel', onWheel, { passive: false });
+    return () => container.removeEventListener('wheel', onWheel);
+  }, [onWheel]);
+
+  return <div ref={scrollRef} className="w-full min-w-0 max-w-full overscroll-x-contain rounded-lg overflow-x-auto" onScroll={onScroll}>
+    {children}
+  </div>;
 }
 
 function resolveAttendanceDayValue(plannedAttendancePrimary: string) {
@@ -345,8 +382,8 @@ function getDerivedInventoryMethods(row: InventoryMatrixRow) {
 
 function ReadOnlyInventoryValue({ value }: { value: string }) {
   return (
-    <div className="flex min-h-[21px] w-full items-center justify-center px-2 py-1 text-center text-[11px] leading-[1.25] text-slate-600">
-      {value}
+    <div title={value || '-'} className="flex min-h-[21px] w-full items-center justify-center px-2 py-1 text-center text-[11px] leading-[1.25] text-slate-600">
+      {value || '-'}
     </div>
   );
 }
@@ -355,8 +392,8 @@ function DerivedInventoryMethodCell({ row }: { row: InventoryMatrixRow }) {
   const methods = getDerivedInventoryMethods(row);
 
   return (
-    <div className="flex min-h-[21px] w-full flex-col items-center justify-center gap-1 px-2 py-1.5 text-center text-[11px] leading-[1.3] text-slate-700">
-      {methods.map((method) => <span key={method}>{method}</span>)}
+    <div title={methods.join('；')} className="flex min-h-[21px] w-full flex-col items-start justify-center gap-0.5 px-2 py-0.5 text-left text-[11px] leading-[1.3] text-slate-700">
+      {methods.map((method) => <span key={method} className="w-full">{method}</span>)}
     </div>
   );
 }
@@ -384,20 +421,39 @@ function InventoryKButton({ label, className = '' }: { label: string; className?
   );
 }
 
-function InventoryInlineInfoButton({ ariaLabel, label }: { ariaLabel: string; label: string }) {
+function InventoryInlineInfoButton({ ariaLabel, label }: { ariaLabel: string; label: React.ReactNode }) {
   return (
+    <Tooltip
+      title={<div className="max-h-[min(60vh,360px)] overflow-y-auto whitespace-pre-line text-xs leading-5">{label}</div>}
+      trigger={['hover', 'focus', 'click']}
+      placement="bottom"
+      styles={{ root: { maxWidth: 'min(460px, calc(100vw - 32px))', zIndex: 150 } }}
+    >
     <button
       type="button"
-      className="group/info relative ml-1 inline-flex h-3.5 w-3.5 flex-none items-center justify-center rounded-full border border-black/40 bg-white text-[9px] font-bold leading-none text-[#143f97]"
+      className="ml-1 inline-flex h-3.5 w-3.5 flex-none items-center justify-center rounded-full border border-slate-400 bg-white align-middle text-[9px] font-bold leading-none text-[#143f97] transition hover:border-blue-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-300"
       aria-label={ariaLabel}
     >
       i
-      <span className="pointer-events-none absolute left-1/2 top-full z-[90] mt-1 w-[300px] -translate-x-1/2 whitespace-pre-line rounded-md border border-gray-200 bg-white px-3 py-2 text-left text-[11px] font-normal leading-5 text-gray-700 opacity-0 shadow-lg transition-opacity group-hover/info:opacity-100 group-focus-visible/info:opacity-100">
-        {label}
-      </span>
     </button>
+    </Tooltip>
   );
 }
+
+const INVENTORY_HEADER_HINTS = {
+  interviewee: '具有共同特征的地点，例如：某公司/某公司下属某仓库',
+  category: '原材料、材料与物料、包装材料、在产品、产成品、持有以供转售商品、备品备件及其他',
+  countPlan: '若识别到被审计单位未制定存货盘点方案，请在完成盘点计划前，咨询AQPP Query Management System',
+  monitorMode: '在允许使用实时视频技术的情况下，项目组可以通过实时视频技术执行一些但不是所有的存货监盘。如果监盘观察是使用实时视频技术进行的，项目组将实施与现场监盘相同的程序。考虑当地法律法规，以确定司法管辖区是否允许使用实时视频技术。请参阅问题“在确定现场监盘与远程监盘的存货盘点场次时，考虑哪些因素？”[7746.9174]了解在确定现场监盘或视频执行存货监盘时需要考虑的因素的进一步信息。\n\n若计划开展远程盘点，请在完成盘点计划前，咨询AQPP Query Management System',
+};
+
+const INVENTORY_SAMPLING_GUIDANCE = (
+  <a href="https://spo-global.kpmg.com/sites/cn-oi-svc-AUD/KAEG/Forms/AllItems.aspx"
+    target="_blank" rel="noopener noreferrer" title="打开 KAEG 文档库查找该文件"
+    className="text-blue-200 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-200">
+    KAEG-I：国际审计准则第530号——审计抽样
+  </a>
+);
 
 function ExplanationColumnsExpandButton({
   onClick,
@@ -458,7 +514,7 @@ function formatEditableAmount(value: string) {
   return amount === null ? value : formatAmount(amount);
 }
 
-function formatInventoryWebAmount(value: string) {
+function formatInventoryWebAmount(value: string, scale = INVENTORY_WEB_AMOUNT_SCALE) {
   const amount = parseAmount(value);
 
   if (amount === null) {
@@ -468,43 +524,47 @@ function formatInventoryWebAmount(value: string) {
   return new Intl.NumberFormat('zh-CN', {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
-  }).format(amount * INVENTORY_WEB_AMOUNT_SCALE);
+  }).format(amount * scale);
 }
 
-function formatInventoryTotalAmount(value: number | null) {
-  return value === null ? '-' : formatInventoryWebAmount(String(value));
+function formatInventoryTotalAmount(value: number | null, scale = INVENTORY_WEB_AMOUNT_SCALE) {
+  return value === null ? '-' : formatInventoryWebAmount(String(value), scale);
 }
 
-function convertInventoryWebAmountToRaw(value: string) {
+function convertInventoryWebAmountToRaw(value: string, scale = INVENTORY_WEB_AMOUNT_SCALE) {
   const amount = parseAmount(value);
   return amount === null
     ? value
-    : formatEditableAmount(String(amount / INVENTORY_WEB_AMOUNT_SCALE));
+    : formatEditableAmount(String(amount / scale));
 }
 
 function InventoryAmountInput({
   rawValue,
+  scale,
   onCommit,
 }: {
   rawValue: string;
+  scale: number;
   onCommit: (value: string) => void;
 }) {
   const [isEditing, setIsEditing] = useState(false);
   const [draftValue, setDraftValue] = useState('');
-  const displayValue = isEditing ? draftValue : formatInventoryWebAmount(rawValue);
+  const displayValue = isEditing ? draftValue : formatInventoryWebAmount(rawValue, scale);
 
   return (
     <input
       className={amountInputClassName}
       value={displayValue}
       onFocus={() => {
-        setDraftValue(formatInventoryWebAmount(rawValue));
+        setDraftValue(formatInventoryWebAmount(rawValue, scale));
         setIsEditing(true);
       }}
       onChange={(event) => setDraftValue(event.target.value)}
       onBlur={() => {
         setIsEditing(false);
-        onCommit(convertInventoryWebAmountToRaw(draftValue));
+        if (draftValue !== formatInventoryWebAmount(rawValue, scale)) {
+          onCommit(convertInventoryWebAmountToRaw(draftValue, scale));
+        }
       }}
     />
   );
@@ -517,6 +577,7 @@ function WrappedInventorySelect({
   className = '',
   disabled = false,
   isOptionDisabled,
+  align = 'auto',
 }: {
   value: string;
   options: readonly string[];
@@ -524,27 +585,65 @@ function WrappedInventorySelect({
   className?: string;
   disabled?: boolean;
   isOptionDisabled?: (option: string) => boolean;
+  align?: 'auto' | 'left';
 }) {
   return (
-    <div className={`relative min-h-[38px] w-full ${className}`}>
+    <div title={value || '-'} className={`relative min-h-[28px] w-full ${className}`}>
       <span
-        className={`flex min-h-[38px] items-center whitespace-normal break-words px-1 py-1 text-[11px] leading-[1.2] ${getInventorySelectionAlignment(value) === 'text-center' ? 'justify-center text-center' : 'justify-start text-left'} ${disabled ? 'text-gray-400' : 'text-gray-700'}`}
+        className={`flex min-h-[28px] items-center whitespace-normal break-words px-1 py-0.5 leading-[1.2] ${options === YES_NO_OPTIONS ? 'text-sm' : 'text-[11px]'} ${align === 'left' || getInventorySelectionAlignment(value) === 'text-left' ? 'justify-start text-left' : 'justify-center text-center'} ${disabled ? 'text-gray-400' : 'text-gray-700'}`}
       >
-        {value}
+        {value || '-'}
       </span>
       <select
         className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
         value={value}
         disabled={disabled}
         onChange={(event) => onChange(event.target.value)}
-        aria-label={value}
+        aria-label={value || '-'}
       >
+        {!options.includes('') && <option value="">-</option>}
         {options.map((option) => (
           <option key={option} value={option} disabled={isOptionDisabled?.(option)}>
-            {option}
+            {option || '-'}
           </option>
         ))}
       </select>
+    </div>
+  );
+}
+
+function AttendanceDaySelect({
+  value,
+  disabled,
+  onChange,
+}: {
+  value: string;
+  disabled: boolean;
+  onChange: (value: string) => void;
+}) {
+  const select = (
+    <select
+      className={value === INDEPENDENT_ATTENDANCE_VALUE
+        ? 'absolute inset-0 h-full w-full cursor-pointer opacity-0 disabled:cursor-not-allowed'
+        : `${selectClassName} ${getInventorySelectionAlignment(value)}`}
+      value={value}
+      disabled={disabled}
+      onChange={(event) => onChange(event.target.value)}
+      aria-label="项目组前往当日，客户是否开展盘点"
+    >
+      {ATTENDANCE_DAY_OPTIONS.map((option) => <option key={option} value={option}>{option || '-'}</option>)}
+    </select>
+  );
+
+  if (value !== INDEPENDENT_ATTENDANCE_VALUE) return select;
+
+  return (
+    <div className="relative flex min-h-[21px] w-full items-center gap-0.5 px-1 text-left text-[11px] text-[#1f1f1f]">
+      <div className="inventory-attendance-text-viewport min-w-0 flex-1 overflow-hidden">
+        <span className="inventory-attendance-text-scroll inline-block w-max whitespace-nowrap">{value}</span>
+      </div>
+      <ChevronDown size={11} className="shrink-0 text-slate-500" aria-hidden="true" />
+      {select}
     </div>
   );
 }
@@ -635,10 +734,16 @@ export default function InventoryMatrix({
   onRowsChange,
   onCreateTasks,
   onOpenLocationSettings,
+  createdTaskRowIds = [],
 }: InventoryMatrixProps) {
+  const createdTaskRowIdSet = new Set(createdTaskRowIds);
   const [uncontrolledRows, setUncontrolledRows] = useState<InventoryMatrixRow[]>(
     controlledRows ?? INITIAL_INVENTORY_MATRIX_ROWS
   );
+  const [amountUnit, setAmountUnit] = useState<'million' | 'thousand'>('million');
+  const amountScale = amountUnit === 'million' ? 0.000001 : 0.001;
+  const amountUnitLabel = amountUnit === 'million' ? '百万元' : '千元';
+  const formatTotalAmount = (value: number | null) => formatInventoryTotalAmount(value, amountScale);
   const [matrixView, setMatrixView] = useState<InventoryMatrixView | null>(null);
   const [phaseView, setPhaseView] = useState<'balance' | 'interim'>('balance');
   const [isExplanationColumnsExpanded, setIsExplanationColumnsExpanded] = useState(false);
@@ -764,7 +869,7 @@ export default function InventoryMatrix({
   };
 
   const handleEndingBalanceConfirmationChange = (id: string, value: string) => {
-    const systemType = value.includes('期末实施的实地盘点结果')
+    const systemType = !value ? '' : value.includes('期末实施的实地盘点结果')
       ? '定期盘存系统'
       : '永续盘存系统';
 
@@ -776,7 +881,7 @@ export default function InventoryMatrix({
   };
 
   const handleInventoryCountPlanChange = (id: string, value: string) => {
-    const countMethod = value.includes('期末以外的特定日期')
+    const countMethod = !value ? '' : value.includes('期末以外的特定日期')
       ? '在非期末时点完成盘点'
       : value.includes('在期末实施的')
         ? '在期末完成盘点'
@@ -851,7 +956,7 @@ export default function InventoryMatrix({
   };
 
   const handleSelectedAsSampleChange = (row: InventoryMatrixRow, nextValue: string) => {
-    if (isSampleYesValue(row.selectedAsSample) && isSampleNoValue(nextValue)) {
+    if (createdTaskRowIdSet.has(row.id) && isSampleYesValue(row.selectedAsSample) && isSampleNoValue(nextValue)) {
       setPendingSampleChange({ rowIds: [row.id], nextValue, reason: '' });
       return;
     }
@@ -1026,8 +1131,15 @@ export default function InventoryMatrix({
     const rowsChangingToNo = selectedRowsForBulkEdit.filter((row) => isSampleYesValue(row.selectedAsSample));
     if (rowsChangingToNo.length === 0) return;
 
+    const rowsRequiringReason = rowsChangingToNo.filter((row) => createdTaskRowIdSet.has(row.id));
+    const immediateRowIds = new Set(rowsChangingToNo.filter((row) => !createdTaskRowIdSet.has(row.id)).map((row) => row.id));
+    commitRows((currentRows) => currentRows.map((row) =>
+      immediateRowIds.has(row.id) ? { ...row, selectedAsSample: '否' } : row
+    ));
+    if (rowsRequiringReason.length === 0) return;
+
     setPendingSampleChange({
-      rowIds: rowsChangingToNo.map((row) => row.id),
+      rowIds: rowsRequiringReason.map((row) => row.id),
       nextValue: '否',
       reason: '',
     });
@@ -1109,24 +1221,58 @@ export default function InventoryMatrix({
   const isBalanceView = matrixView === 'balance';
   const isAllColumnsView = matrixView === 'all';
   const isInterimView = phaseView === 'interim';
-  const identityColumnWidths = matrixView === null
-    ? [50, 84, 100, 64, 62]
-    : [50, 92, 112, 72, 82];
+  const allCurrentAmountColumns = [
+    { field: 'finalPlannedBalance', label: '本期期末余额（百万元）', shareField: 'finalShare', total: totalFinalPlannedBalance },
+    { field: 'interimPlannedBalance', label: '本期预审阶段余额（百万元）', shareField: 'interimShare', total: totalInterimPlannedBalance },
+  ] as const;
+  const currentAmountColumns = isInterimView ? [...allCurrentAmountColumns].reverse() : allCurrentAmountColumns;
+  const identityColumnWidths = [44, 92, 112, 72, 120, 76].map(compactColumnWidth);
+  const baseScrollColumnWidths = [
+    ...(matrixView === null ? [101, 46, 54, 150, 170, 82, 105, 105, 170, 72] : []),
+    ...(matrixView === 'balance' ? [101, 46, 54, 88, 46, 92, 46, 54, 92, 46] : []),
+    ...(isAllColumnsView ? [101, 46, 101, 46] : []),
+    ...(matrixView === 'management' || isAllColumnsView ? [150, 120, 170, 125, 82, 92] : []),
+    ...(matrixView === 'monitoring' || isAllColumnsView ? [105, 105, 170, 72, 155, 125, 136, 145] : []),
+    132,
+  ].map(compactColumnWidth);
+  const scrollColumnWidths = baseScrollColumnWidths;
+  const baseColumnWidths = [...identityColumnWidths, ...scrollColumnWidths];
+  const baseTableWidth = baseColumnWidths.reduce((total, width) => total + width, 0);
+  const defaultAmountWidth = baseColumnWidths[6];
+  const columnWidths = matrixView === null
+    ? baseColumnWidths.map((width, index) => index === 6
+      ? width * 1.1
+      : width * (baseTableWidth - defaultAmountWidth * 1.1) / (baseTableWidth - defaultAmountWidth))
+    : baseColumnWidths;
+  const tableWidth = columnWidths.reduce((total, width) => total + width, 0);
+  const headerGroups = [
+    { label: '', columns: 6 },
+    ...(matrixView === null ? [
+      { label: '存货构成', columns: 3 },
+      { label: '被审计单位的存货管理方式', columns: 3 },
+      { label: '项目组计划的存货监盘方法', columns: 4 },
+    ] : []),
+    ...(matrixView === 'balance' || isAllColumnsView ? [{ label: '存货构成', columns: isAllColumnsView ? 4 : 10 }] : []),
+    ...(matrixView === 'management' || isAllColumnsView ? [{ label: '被审计单位的存货管理方式', columns: 6 }] : []),
+    ...(matrixView === 'monitoring' || isAllColumnsView ? [{ label: '项目组计划的存货监盘方法', columns: 8 }] : []),
+    { label: '', columns: 1 },
+  ];
   const identityColumnLefts = identityColumnWidths.map((_, index) =>
     identityColumnWidths.slice(0, index).reduce((total, width) => total + width, 0)
   );
   const currentAmountColumnLeft = identityColumnWidths.reduce((total, width) => total + width, 0);
-  const hasStickyCurrentAmount = matrixView === null || matrixView === 'balance' || matrixView === 'monitoring' || isAllColumnsView;
-  const stickyIdentityHeaderClassName = 'sticky z-40 outline outline-1 -outline-offset-1 outline-slate-300';
-  const stickyIdentityCellClassName = 'sticky z-20 outline outline-1 -outline-offset-1 outline-slate-300';
-  const stickyIdentityBoundaryClassName = 'shadow-[8px_0_12px_-10px_rgba(15,23,42,0.45)]';
+  const hasStickyCurrentAmount = matrixView === null || matrixView === 'balance' || isAllColumnsView;
+  const stickyIdentityHeaderClassName = isAllColumnsView ? 'sticky z-40 outline outline-1 -outline-offset-1 outline-slate-300' : '';
+  const stickyIdentityCellClassName = isAllColumnsView ? 'sticky z-20 outline outline-1 -outline-offset-1 outline-slate-300' : '';
+  const stickyIdentityBoundaryClassName = isAllColumnsView ? 'shadow-[8px_0_12px_-10px_rgba(15,23,42,0.45)]' : '';
   const showAmountColumns = !isExplanationColumnsExpanded;
-  const handleInventoryMatrixWheel = (event: React.WheelEvent<HTMLDivElement>) => {
+  const handleInventoryMatrixWheel = (event: WheelEvent) => {
     if (!isAllColumnsView) {
       return;
     }
 
-    const container = event.currentTarget;
+    event.preventDefault();
+    const container = event.currentTarget as HTMLDivElement;
     const canScrollHorizontally = container.scrollWidth > container.clientWidth;
 
     if (!canScrollHorizontally) {
@@ -1138,14 +1284,13 @@ export default function InventoryMatrix({
       return;
     }
 
-    event.preventDefault();
     const now = performance.now();
     if (now - lastHorizontalWheelStepAtRef.current < 140) {
       return;
     }
     lastHorizontalWheelStepAtRef.current = now;
 
-    const columnBoundaries = ALL_VIEW_SCROLL_COLUMN_WIDTHS.reduce<number[]>(
+    const columnBoundaries = scrollColumnWidths.reduce<number[]>(
       (boundaries, width) => [...boundaries, boundaries[boundaries.length - 1] + width],
       [0]
     );
@@ -1157,6 +1302,7 @@ export default function InventoryMatrix({
     container.scrollTo({ left: targetLeft, behavior: 'smooth' });
   };
   const renderAmountHeader = (label: string, field: InventoryAmountSortField) => {
+    label = label.replace('百万元', amountUnitLabel);
     const [amountLabel, amountUnit] = label.split('（');
     const isActive = inventoryAmountSort?.field === field;
     const nextDirection: InventorySortDirection =
@@ -1191,7 +1337,7 @@ export default function InventoryMatrix({
     );
   };
   const renderSelectableCurrentAmountHeader = () => {
-    const label = isInterimView ? '本期预审阶段余额（百万元）' : '本期期末余额（百万元）';
+    const label = isInterimView ? `本期预审阶段余额（${amountUnitLabel}）` : `本期期末余额（${amountUnitLabel}）`;
     const field: InventoryAmountSortField = isInterimView
       ? 'interimPlannedBalance'
       : 'finalPlannedBalance';
@@ -1247,12 +1393,13 @@ export default function InventoryMatrix({
   };
 
   return (
-    <div className={embedded ? 'mt-8' : 'space-y-4'}>
+    <div className={`min-w-0 max-w-full ${embedded ? 'mt-8' : 'space-y-4'}`}>
       {!embedded && <h2 className="border-l-4 border-blue-600 pl-3 text-lg font-bold">{title}</h2>}
 
-      <div className={`${embedded ? '' : 'ml-4'} overflow-visible rounded-lg border border-gray-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]`}>
+      <div className={`${embedded ? '' : 'ml-4'} overflow-visible rounded-b-lg border-b border-gray-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]`}>
         <TableFullscreenFrame
           title={title}
+          fullscreenClassName="inventory-matrix-fullscreen"
         >
         {isCategoryTooltipVisible && (
           <div
@@ -1263,23 +1410,10 @@ export default function InventoryMatrix({
             <span className="absolute bottom-[-5px] left-1/2 h-2.5 w-2.5 -translate-x-1/2 rotate-45 border-b border-r border-gray-200 bg-white" />
           </div>
         )}
-        <div className="mb-2 mt-2 flex flex-wrap items-end justify-between gap-3 px-1">
-          <div className="flex w-[390px] flex-col items-start gap-2">
-            <label className="relative block w-full">
-              <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
-              <input
-                type="search"
-                value={inventorySearchTerm}
-                onChange={(event) => {
-                  setInventorySearchTerm(event.target.value);
-                  setInventoryPage(1);
-                }}
-                placeholder="搜索所属公司名称、受访单位名称、类别"
-                className="h-7 w-full rounded border border-slate-200 bg-white py-1 pl-7 pr-2 text-[11px] text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-[#143f97] focus:ring-1 focus:ring-[#143f97]/20"
-              />
-            </label>
+        <div className="mb-2 mt-2 grid grid-cols-1 items-center gap-x-3 gap-y-2 px-1 sm:grid-cols-[minmax(0,390px)_minmax(0,1fr)]">
+          <div className="contents">
             <div
-              className="flex w-full items-center overflow-hidden rounded-full border border-blue-200 bg-white p-0.5 text-[11px] font-medium shadow-sm"
+              className="flex h-8 w-full items-center overflow-hidden rounded-full border border-blue-200 bg-white p-0.5 text-sm font-medium shadow-sm sm:col-start-1 sm:row-start-1"
               role="group"
               aria-label="存货矩阵字段分组"
             >
@@ -1295,8 +1429,21 @@ export default function InventoryMatrix({
                 </button>
               ))}
             </div>
+            <label className="relative block w-full sm:col-start-1 sm:row-start-2">
+              <Search className="pointer-events-none absolute left-2 top-[calc(50%+4px)] h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+              <input
+                type="search"
+                value={inventorySearchTerm}
+                onChange={(event) => {
+                  setInventorySearchTerm(event.target.value);
+                  setInventoryPage(1);
+                }}
+                placeholder="搜索所属公司名称、受访单位名称、类别"
+                className="h-7 w-full rounded border border-slate-200 bg-white py-1 pl-7 pr-2 text-[11px] text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-[#143f97] focus:ring-1 focus:ring-[#143f97]/20"
+              />
+            </label>
           </div>
-          <div className="flex items-center gap-2 self-end">
+          <div className="flex flex-wrap items-center justify-end gap-2 sm:col-start-2 sm:row-start-1">
             <div className="flex items-center">
               <div className="flex h-8 items-center overflow-hidden rounded-lg border border-slate-200 bg-white p-0.5 shadow-sm">
                 {toolbarActions}
@@ -1334,35 +1481,45 @@ export default function InventoryMatrix({
               </button>
             )}
           </div>
+        <div className="flex h-7 items-center justify-end gap-2 text-xs text-gray-500 sm:col-start-2 sm:row-start-2" role="group" aria-label="金额显示单位">
+          <span>金额单位</span>
+          <div className="inline-flex rounded-md bg-gray-100 p-0.5">
+            {(['million', 'thousand'] as const).map((unit) => (
+              <button key={unit} type="button" aria-pressed={amountUnit === unit}
+                onClick={() => setAmountUnit(unit)}
+                className={`rounded px-2.5 py-1 transition hover:text-gray-700 ${amountUnit === unit ? 'bg-white font-medium text-gray-600 shadow-sm' : 'text-gray-400'}`}>
+                {unit === 'million' ? '百万' : '千'}
+              </button>
+            ))}
+          </div>
         </div>
-        <div
-          className={`w-full overscroll-none rounded-lg ${isAllColumnsView ? 'overflow-x-auto' : 'overflow-x-hidden'}`}
+        </div>
+        <InventoryMatrixScrollArea
           onScroll={(event) => setMatrixScrollLeft(event.currentTarget.scrollLeft)}
           onWheel={handleInventoryMatrixWheel}
         >
           <table
-            className="w-full table-fixed border-collapse bg-white text-[11px] [&_td]:border-slate-300 [&_td]:text-center [&_th]:border-slate-300 [&_th]:text-center [&_input]:text-center"
-            style={isAllColumnsView
-              ? { width: `${ALL_VIEW_TABLE_WIDTH}px`, minWidth: `${ALL_VIEW_TABLE_WIDTH}px` }
-              : { width: '100%', minWidth: '100%' }}
+            className={`inventory-matrix-table w-full table-fixed border-collapse bg-white text-[11px] [&_td]:border-slate-300 [&_td]:text-center [&_th]:border-slate-300 [&_th]:text-center [&_input]:text-center ${isAllColumnsView ? '' : '[&_th]:px-1 [&_td]:px-0 [&_input]:min-w-0 [&_input]:px-1'}`}
+            style={{ width: isAllColumnsView ? tableWidth : '100%' }}
           >
             <colgroup>
-              <col style={{ width: '50px' }} />
-              <col style={{ width: matrixView === null ? '84px' : '92px' }} />
-              <col style={{ width: matrixView === null ? '100px' : '112px' }} />
-              <col style={{ width: matrixView === null ? '64px' : '72px' }} />
-              <col style={{ width: matrixView === null ? '62px' : '82px' }} />
-              {matrixView === null && <><col style={{ width: '94px' }} /><col style={{ width: '42px' }} /><col style={{ width: '46px' }} /><col style={{ width: '108px' }} /><col style={{ width: '112px' }} /><col style={{ width: '70px' }} /><col style={{ width: '94px' }} /><col style={{ width: '94px' }} /><col style={{ width: '110px' }} /><col style={{ width: '62px' }} /></>}
-              {(matrixView === 'balance' || isAllColumnsView) && <><col style={{ width: '101px' }} /><col style={{ width: '46px' }} /><col style={{ width: '54px' }} /><col style={{ width: '88px' }} /><col style={{ width: '46px' }} /><col style={{ width: '92px' }} /><col style={{ width: '46px' }} /><col style={{ width: '54px' }} /><col style={{ width: '92px' }} /><col style={{ width: '46px' }} /></>}
-              {(matrixView === 'management' || isAllColumnsView) && <><col style={{ width: '120px' }} /><col style={{ width: '150px' }} /><col style={{ width: '125px' }} /><col style={{ width: '170px' }} /><col style={{ width: '82px' }} /><col style={{ width: '92px' }} /></>}
-              {matrixView === 'monitoring' && <col style={{ width: '101px' }} />}
-              {(matrixView === 'monitoring' || isAllColumnsView) && <><col style={{ width: '105px' }} /><col style={{ width: '105px' }} /><col style={{ width: '170px' }} /><col style={{ width: '72px' }} /></>}
-              {(matrixView === 'arrangements' || isAllColumnsView) && <><col style={{ width: '155px' }} /><col style={{ width: '125px' }} /><col style={{ width: '145px' }} /></>}
-              <col style={{ width: matrixView === null ? '108px' : '120px' }} />
-              {/* 操作列暂时隐藏：<col style={{ width: matrixView === null ? '60px' : '68px' }} /> */}
+              {columnWidths.map((width, index) => <col key={index} style={{ width: isAllColumnsView ? width : `${width / tableWidth * 100}%`, '--inventory-column-share': `${width / tableWidth * 100}%` } as React.CSSProperties} />)}
             </colgroup>
-            <thead style={{ fontFamily: '"Microsoft YaHei", "Microsoft YaHei UI", sans-serif', fontSize: '11px' }}>
-              <tr>
+            <thead style={{ fontFamily: '"Microsoft YaHei", "Microsoft YaHei UI", sans-serif', fontSize: '13px' }}>
+              <StableMatrixRow height={24}>
+                {headerGroups.map((group, index) => (
+                  <th
+                    key={index}
+                    colSpan={group.columns}
+                    scope={group.label ? 'colgroup' : undefined}
+                    className={`${headerCellClassName} ${index === 0 ? stickyIdentityHeaderClassName : ''} ${index === headerGroups.length - 1 ? stickyRightHeaderClassName : ''}`}
+                    style={index === 0 ? { left: 0 } : undefined}
+                  >
+                    {group.label}
+                  </th>
+                ))}
+              </StableMatrixRow>
+              <StableMatrixRow height={56}>
                 <th className={`${headerCellClassName} ${stickyIdentityHeaderClassName}`} style={{ left: identityColumnLefts[0] }}>
                   <div className="flex items-center justify-center gap-1.5">
                     <CircularSelectionCheckbox
@@ -1376,11 +1533,12 @@ export default function InventoryMatrix({
                   </div>
                 </th>
                 <th className={`${headerCellClassName} ${stickyIdentityHeaderClassName}`} style={{ left: identityColumnLefts[1] }}><CenteredLeftHeaderText>所属公司名称</CenteredLeftHeaderText></th>
-                <th className={`${headerCellClassName} ${stickyIdentityHeaderClassName}`} style={{ left: identityColumnLefts[2] }}><CenteredLeftHeaderText>受访单位名称</CenteredLeftHeaderText></th>
-                <th ref={categoryHeaderRef} className={`${headerCellClassName} ${stickyIdentityHeaderClassName}`} style={{ left: identityColumnLefts[3] }}><CenteredLeftHeaderText>{matrixView === null ? '类别' : '存货类别'}</CenteredLeftHeaderText></th>
-                <th className={`${greenHeaderCellClassName} ${stickyIdentityHeaderClassName} ${hasStickyCurrentAmount ? '' : stickyIdentityBoundaryClassName}`} style={{ left: identityColumnLefts[4] }}>
-                  <div className="inline-flex items-center justify-start gap-1 text-left">
-                    <span>选为盘点对象</span>
+                <th className={`${headerCellClassName} ${stickyIdentityHeaderClassName}`} style={{ left: identityColumnLefts[2] }}><CenteredLeftHeaderText>受访单位名称<InventoryInlineInfoButton ariaLabel="受访单位名称说明" label={INVENTORY_HEADER_HINTS.interviewee} /></CenteredLeftHeaderText></th>
+                <th ref={categoryHeaderRef} className={`${headerCellClassName} ${stickyIdentityHeaderClassName}`} style={{ left: identityColumnLefts[3] }}><CenteredLeftHeaderText>{matrixView === null ? '类别' : '存货类别'}<InventoryInlineInfoButton ariaLabel="存货类别说明" label={INVENTORY_HEADER_HINTS.category} /></CenteredLeftHeaderText></th>
+                <th className={`${headerCellClassName} ${stickyIdentityHeaderClassName}`} style={{ left: identityColumnLefts[4] }}><CenteredLeftHeaderText>存货其他特征</CenteredLeftHeaderText></th>
+                <th className={`${greenHeaderCellClassName} ${stickyIdentityHeaderClassName} ${hasStickyCurrentAmount ? '' : stickyIdentityBoundaryClassName}`} style={{ left: identityColumnLefts[5] }}>
+                  <div className="flex flex-col items-center justify-center gap-0.5 text-center">
+                    <span className="break-all">选为盘点对象</span>
                     <label
                       className={`relative inline-flex h-4 w-4 shrink-0 cursor-pointer items-center justify-center rounded transition hover:bg-white/70 ${sampleSelectionFilter === 'all' ? 'text-slate-500' : 'bg-white/70 text-[#00338D]'}`}
                       title={`筛选：${sampleSelectionFilter === 'all' ? '全部' : sampleSelectionFilter === 'yes' ? '是' : '否'}`}
@@ -1405,16 +1563,16 @@ export default function InventoryMatrix({
                 {matrixView === null && <>
                   <th className={`${headerCellClassName} ${stickyIdentityHeaderClassName} ${stickyIdentityBoundaryClassName}`} style={{ left: currentAmountColumnLeft }}>{renderSelectableCurrentAmountHeader()}</th>
                   <th className={lightHeaderCellClassName}><CenteredLeftHeaderText>占比</CenteredLeftHeaderText></th>
-                  <th className={lightHeaderCellClassName}><CenteredLeftHeaderText>变动幅度</CenteredLeftHeaderText></th>
-                  <th className={headerCellClassName}><CenteredLeftHeaderText>被审计单位的<br />存货盘存系统</CenteredLeftHeaderText></th>
-                  <th className={headerCellClassName}><CenteredLeftHeaderText>被审计单位的<br />存货盘点方案</CenteredLeftHeaderText></th>
+                  <th className={lightHeaderCellClassName}><CenteredLeftHeaderText>变动<br />幅度</CenteredLeftHeaderText></th>
+                  <th className={headerCellClassName}>盘存系统</th>
+                  <th className={headerCellClassName}>盘点方法<InventoryInlineInfoButton ariaLabel="盘点方法说明" label={INVENTORY_HEADER_HINTS.countPlan} /></th>
                   <th className={headerCellClassName}><CenteredLeftHeaderText>存放在<br />第三方地点？</CenteredLeftHeaderText></th>
-                  <th className={headerCellClassName}><CenteredLeftHeaderText>项目组是否可以前往<br />存货所在地点实施监盘</CenteredLeftHeaderText></th>
-                  <th className={headerCellClassName}><CenteredLeftHeaderText>项目组前往当日<br />客户是否开展盘点</CenteredLeftHeaderText></th>
-                  <th className={headerCellClassName}><CenteredLeftHeaderText>项目组就监盘而<br />计划的审计方案</CenteredLeftHeaderText></th>
-                  <th className={headerCellClassName}><CenteredLeftHeaderText>样本数量</CenteredLeftHeaderText></th>
+                  <th className={headerCellClassName}><CenteredLeftHeaderText>可否前往实地开展盘点</CenteredLeftHeaderText></th>
+                  <th className={headerCellClassName}><CenteredLeftHeaderText>前往当日客户是否开展盘点</CenteredLeftHeaderText></th>
+                  <th className={headerCellClassName}><CenteredLeftHeaderText>计划的审计方案</CenteredLeftHeaderText></th>
+                  <th className={headerCellClassName}><CenteredLeftHeaderText>抽盘数量<InventoryInlineInfoButton ariaLabel="抽盘数量说明" label={INVENTORY_SAMPLING_GUIDANCE} /></CenteredLeftHeaderText></th>
                 </>}
-                {(matrixView === 'balance' || isAllColumnsView) && <>
+                {matrixView === 'balance' && <>
                   <th className={`${headerCellClassName} ${stickyIdentityHeaderClassName} ${stickyIdentityBoundaryClassName}`} style={{ left: currentAmountColumnLeft }}>{isAllColumnsView ? renderSelectableCurrentAmountHeader() : renderAmountHeader('本期期末余额（百万元）', 'finalPlannedBalance')}</th>
                   <th className={lightHeaderCellClassName}><CenteredLeftHeaderText>占比</CenteredLeftHeaderText></th>
                   <th className={lightHeaderCellClassName}><CenteredLeftHeaderText>变动<br />幅度</CenteredLeftHeaderText></th>
@@ -1426,35 +1584,41 @@ export default function InventoryMatrix({
                   <th className={headerCellClassName}>{isAllColumnsView && isInterimView ? renderAmountHeader('上期期末余额（百万元）', 'priorBalance') : renderAmountHeader('上期预审阶段余额（百万元）', 'currentInterimStage')}</th>
                   <th className={lightHeaderCellClassName}><CenteredLeftHeaderText>占比</CenteredLeftHeaderText></th>
                 </>}
+                {isAllColumnsView && currentAmountColumns.map((column, index) => (
+                  <React.Fragment key={column.field}>
+                    <th className={`${headerCellClassName} ${index === 0 ? stickyIdentityHeaderClassName + ' ' + stickyIdentityBoundaryClassName : ''}`} style={index === 0 ? { left: currentAmountColumnLeft } : undefined}>
+                      {index === 0 ? renderSelectableCurrentAmountHeader() : renderAmountHeader(column.label, column.field)}
+                    </th>
+                    <th className={lightHeaderCellClassName}><CenteredLeftHeaderText>占比</CenteredLeftHeaderText></th>
+                  </React.Fragment>
+                ))}
                 {(matrixView === 'management' || isAllColumnsView) && <>
-                  <th className={headerCellClassName}><CenteredLeftHeaderText>被审计单位的<br />存货盘存系统</CenteredLeftHeaderText></th>
-                  <th className={headerCellClassName}><CenteredLeftHeaderText>被审计单位如何确认<br />期末存货余额</CenteredLeftHeaderText></th>
-                  <th className={headerCellClassName}><CenteredLeftHeaderText>被审计单位的<br />存货盘点方案</CenteredLeftHeaderText></th>
-                  <th className={headerCellClassName}><CenteredLeftHeaderText>被审计单位如何计划<br />具体存货盘点</CenteredLeftHeaderText></th>
+                  <th colSpan={2} className={headerCellClassName}>如何确认期末存货余额<br />（使用的盘存系统）</th>
+                  <th colSpan={2} className={headerCellClassName}>如何计划存货盘点<InventoryInlineInfoButton ariaLabel="如何计划存货盘点说明" label={INVENTORY_HEADER_HINTS.countPlan} /><br />（设计的盘点方法）</th>
                   <th className={headerCellClassName}><CenteredLeftHeaderText>存放在<br />第三方地点？</CenteredLeftHeaderText></th>
                   <th className={headerCellClassName}><CenteredLeftHeaderText>被审计单位<br />是否使用专家</CenteredLeftHeaderText></th>
                 </>}
                 {(matrixView === 'monitoring' || isAllColumnsView) && <>
-                  {matrixView === 'monitoring' && <th className={`${headerCellClassName} ${stickyIdentityHeaderClassName} ${stickyIdentityBoundaryClassName}`} style={{ left: currentAmountColumnLeft }}>{renderAmountHeader('本期期末余额（百万元）', 'finalPlannedBalance')}</th>}
-                  <th className={headerCellClassName}><CenteredLeftHeaderText>项目组是否可以前往<br />存货所在地点实施监盘</CenteredLeftHeaderText></th>
-                  <th className={headerCellClassName}><CenteredLeftHeaderText>项目组前往当日<br />客户是否开展盘点</CenteredLeftHeaderText></th>
-                  <th className={headerCellClassName}><CenteredLeftHeaderText>项目组就监盘而<br />计划的审计方案</CenteredLeftHeaderText></th>
-                  <th className={headerCellClassName}><CenteredLeftHeaderText>样本数量</CenteredLeftHeaderText></th>
+                  <th className={headerCellClassName}><CenteredLeftHeaderText>可否前往实地开展盘点</CenteredLeftHeaderText></th>
+                  <th className={headerCellClassName}><CenteredLeftHeaderText>前往当日客户是否开展盘点</CenteredLeftHeaderText></th>
+                  <th className={headerCellClassName}><CenteredLeftHeaderText>计划的审计方案</CenteredLeftHeaderText></th>
+                  <th className={headerCellClassName}><CenteredLeftHeaderText>抽盘数量<InventoryInlineInfoButton ariaLabel="抽盘数量说明" label={INVENTORY_SAMPLING_GUIDANCE} /></CenteredLeftHeaderText></th>
                 </>}
-                {(matrixView === 'arrangements' || isAllColumnsView) && <>
-                  <th className={headerCellClassName}><CenteredLeftHeaderText>发出函证</CenteredLeftHeaderText></th>
-                  <th className={headerCellClassName}><CenteredLeftHeaderText>现场监盘 vs 远程监盘</CenteredLeftHeaderText></th>
-                  <th className={headerCellClassName}><CenteredLeftHeaderText>利用内审<br />获取审计证据</CenteredLeftHeaderText></th>
+                {(matrixView === 'monitoring' || isAllColumnsView) && <>
+                  <th className={headerCellClassName}><CenteredLeftHeaderText>是否发出函证</CenteredLeftHeaderText></th>
+                  <th className={headerCellClassName}><CenteredLeftHeaderText>现场监盘 vs 远程监盘<InventoryInlineInfoButton ariaLabel="现场监盘 vs 远程监盘说明" label={INVENTORY_HEADER_HINTS.monitorMode} /></CenteredLeftHeaderText></th>
+                  <th className={headerCellClassName}><CenteredLeftHeaderText>是否引入专家<br />和/或特定项目组成员</CenteredLeftHeaderText></th>
+                  <th className={headerCellClassName}><CenteredLeftHeaderText>是否利用<br />内部审计工作</CenteredLeftHeaderText></th>
                 </>}
                 <th className={`${headerCellClassName} ${stickyRightHeaderClassName}`}><CenteredLeftHeaderText>项目组决定的<br />存货监盘方法</CenteredLeftHeaderText></th>
                 {/* 操作列暂时隐藏：<th className={headerCellClassName}>操作</th> */}
-              </tr>
+              </StableMatrixRow>
             </thead>
             <tbody>
               {paginatedRows.map((row, pageIndex) => {
                 const rowIndex = rows.findIndex((candidate) => candidate.id === row.id);
                 const derivedRow = derivedRows.find((candidate) => candidate.id === row.id)!;
-                return <tr key={row.id} className="hover:bg-slate-50">
+                return <StableMatrixRow key={row.id} className="hover:bg-slate-50">
                   <td className={`border bg-slate-50 px-1 py-1 text-center font-mono text-[11px] text-slate-400 ${stickyIdentityCellClassName}`} style={{ left: identityColumnLefts[0] }}>
                     <div className="flex items-center justify-center gap-1.5">
                       <CircularSelectionCheckbox
@@ -1468,86 +1632,94 @@ export default function InventoryMatrix({
                   <td className={`${lockIdentityColumns ? grayCellClassName : yellowCellClassName} ${stickyIdentityCellClassName}`} style={{ left: identityColumnLefts[1] }}><input className={inputClassName} value={row.companyName} readOnly={lockIdentityColumns} onChange={(event) => updateRow(row.id, 'companyName', event.target.value)} /></td>
                   <td className={`${lockIdentityColumns ? grayCellClassName : yellowCellClassName} ${stickyIdentityCellClassName}`} style={{ left: identityColumnLefts[2] }}><input className={inputClassName} value={row.intervieweeName} readOnly={lockIdentityColumns} onChange={(event) => updateRow(row.id, 'intervieweeName', event.target.value)} /></td>
                   <td className={`${yellowCellClassName} ${stickyIdentityCellClassName}`} style={{ left: identityColumnLefts[3] }}><input className={inputClassName} value={row.category} onChange={(event) => updateRow(row.id, 'category', event.target.value)} /></td>
-                  <td className={`${grayCellClassName} ${stickyIdentityCellClassName} ${hasStickyCurrentAmount ? '' : stickyIdentityBoundaryClassName}`} style={{ left: identityColumnLefts[4] }}><select className={`${selectClassName} ${getInventorySelectionAlignment(row.selectedAsSample)}`} value={row.selectedAsSample} onChange={(event) => handleSelectedAsSampleChange(row, event.target.value)}>{SAMPLE_SELECTION_OPTIONS.map((option) => <option key={option}>{option}</option>)}</select></td>
+                  <td className={`${yellowCellClassName} ${stickyIdentityCellClassName}`} style={{ left: identityColumnLefts[4] }}><input aria-label="存货其他特征" className={inputClassName} value={row.otherCharacteristics ?? ''} onChange={(event) => updateRow(row.id, 'otherCharacteristics', event.target.value)} /></td>
+                  <td className={`${grayCellClassName} ${stickyIdentityCellClassName} ${hasStickyCurrentAmount ? '' : stickyIdentityBoundaryClassName}`} style={{ left: identityColumnLefts[5] }}><select className={`${yesNoSelectClassName} ${getInventorySelectionAlignment(row.selectedAsSample)}`} value={row.selectedAsSample} onChange={(event) => handleSelectedAsSampleChange(row, event.target.value)}>{SAMPLE_SELECTION_OPTIONS.map((option) => <option key={option} value={option}>{option || '-'}</option>)}</select></td>
                   {matrixView === null && <>
-                    <td className={`${yellowCellClassName} ${stickyIdentityCellClassName} ${stickyIdentityBoundaryClassName}`} style={{ left: currentAmountColumnLeft }}><InventoryAmountInput rawValue={isInterimView ? row.interimPlannedBalance : row.finalPlannedBalance} onCommit={(value) => updateRow(row.id, isInterimView ? 'interimPlannedBalance' : 'finalPlannedBalance', value)} /></td>
+                    <td className={`${yellowCellClassName} ${stickyIdentityCellClassName} ${stickyIdentityBoundaryClassName}`} style={{ left: currentAmountColumnLeft }}><InventoryAmountInput scale={amountScale} rawValue={isInterimView ? row.interimPlannedBalance : row.finalPlannedBalance} onCommit={(value) => updateRow(row.id, isInterimView ? 'interimPlannedBalance' : 'finalPlannedBalance', value)} /></td>
                     <td className={derivedCellClassName}>{isInterimView ? derivedRow.interimShare : derivedRow.finalShare}</td>
                     <td className={derivedCellClassName}>{isInterimView ? derivedRow.interimChange : derivedRow.finalChange}</td>
-                    <td className={grayCellClassName}><ReadOnlyInventoryValue value={row.systemType} /></td>
-                    <td className={grayCellClassName}><ReadOnlyInventoryValue value={row.countMethod} /></td>
-                    <td className={neutralCellClassName}><select className={`${selectClassName} ${getInventorySelectionAlignment(row.thirdPartyStorage)}`} value={row.thirdPartyStorage} onChange={(event) => handleThirdPartyStorageChange(row.id, event.target.value)}>{YES_NO_OPTIONS.map((option) => <option key={option}>{option}</option>)}</select></td>
+                    <td className={grayCellClassName}><WrappedInventorySelect value={row.endingBalanceConfirmation} options={ENDING_BALANCE_CONFIRMATION_OPTIONS} onChange={(value) => handleEndingBalanceConfirmationChange(row.id, value)} /></td>
+                    <td className={grayCellClassName}><WrappedInventorySelect value={row.inventoryCountPlan} options={INVENTORY_COUNT_PLAN_OPTIONS} onChange={(value) => handleInventoryCountPlanChange(row.id, value)} /></td>
+                    <td className={neutralCellClassName}><select className={`${yesNoSelectClassName} ${getInventorySelectionAlignment(row.thirdPartyStorage)}`} value={row.thirdPartyStorage} onChange={(event) => handleThirdPartyStorageChange(row.id, event.target.value)}>{YES_NO_OPTIONS.map((option) => <option key={option} value={option}>{option || '-'}</option>)}</select></td>
                     <td className={neutralCellClassName}><WrappedInventorySelect value={row.plannedAttendancePrimary} options={ATTENDANCE_FEASIBILITY_OPTIONS} onChange={(value) => handleAttendanceFeasibilityChange(row.id, value)} /></td>
-                    <td className={row.plannedAttendancePrimary === '是' ? neutralCellClassName : grayCellClassName}><select className={`${selectClassName} ${getInventorySelectionAlignment(row.plannedAttendanceSecondary)}`} value={row.plannedAttendanceSecondary} disabled={row.plannedAttendancePrimary !== '是'} onChange={(event) => handleAttendanceDayChange(row.id, event.target.value)}>{row.plannedAttendancePrimary !== '是' && <option value="" />}{ATTENDANCE_DAY_OPTIONS.map((option) => <option key={option}>{option}</option>)}</select></td>
-                    <td className={grayCellClassName}><WrappedInventorySelect value={row.auditApproach} disabled={row.plannedAttendancePrimary !== '是' || row.plannedAttendanceSecondary === INDEPENDENT_ATTENDANCE_VALUE} options={AUDIT_APPROACH_OPTIONS} isOptionDisabled={(option) => isAuditApproachOptionDisabled(row.plannedAttendanceSecondary, option)} onChange={(value) => handleAuditApproachChange(row.id, value)} /></td>
+                    <td className={row.plannedAttendancePrimary === '是' ? neutralCellClassName : grayCellClassName}><AttendanceDaySelect value={row.plannedAttendanceSecondary} disabled={row.plannedAttendancePrimary !== '是'} onChange={(value) => handleAttendanceDayChange(row.id, value)} /></td>
+                    <td className={grayCellClassName}><WrappedInventorySelect value={row.auditApproach} align="left" disabled={row.plannedAttendancePrimary !== '是' || row.plannedAttendanceSecondary === INDEPENDENT_ATTENDANCE_VALUE} options={AUDIT_APPROACH_OPTIONS} isOptionDisabled={(option) => isAuditApproachOptionDisabled(row.plannedAttendanceSecondary, option)} onChange={(value) => handleAuditApproachChange(row.id, value)} /></td>
                     <td className={yellowCellClassName}><input className={inputClassName} value={row.sampleQuantity} onChange={(event) => updateRow(row.id, 'sampleQuantity', event.target.value)} /></td>
                   </>}
-                  {(matrixView === 'balance' || isAllColumnsView) && <>
-                    <td className={`${yellowCellClassName} ${stickyIdentityCellClassName} ${stickyIdentityBoundaryClassName}`} style={{ left: currentAmountColumnLeft }}><InventoryAmountInput rawValue={isAllColumnsView && isInterimView ? row.interimPlannedBalance : row.finalPlannedBalance} onCommit={(value) => updateRow(row.id, isAllColumnsView && isInterimView ? 'interimPlannedBalance' : 'finalPlannedBalance', value)} /></td>
+                  {matrixView === 'balance' && <>
+                    <td className={`${yellowCellClassName} ${stickyIdentityCellClassName} ${stickyIdentityBoundaryClassName}`} style={{ left: currentAmountColumnLeft }}><InventoryAmountInput scale={amountScale} rawValue={isAllColumnsView && isInterimView ? row.interimPlannedBalance : row.finalPlannedBalance} onCommit={(value) => updateRow(row.id, isAllColumnsView && isInterimView ? 'interimPlannedBalance' : 'finalPlannedBalance', value)} /></td>
                     <td className={derivedCellClassName}>{isAllColumnsView && isInterimView ? derivedRow.interimShare : derivedRow.finalShare}</td><td className={derivedCellClassName}>{isAllColumnsView && isInterimView ? derivedRow.interimChange : derivedRow.finalChange}</td>
-                    <td className={yellowCellClassName}><InventoryAmountInput rawValue={isAllColumnsView && isInterimView ? row.currentInterimStage : row.priorBalance} onCommit={(value) => updateRow(row.id, isAllColumnsView && isInterimView ? 'currentInterimStage' : 'priorBalance', value)} /></td>
+                    <td className={yellowCellClassName}><InventoryAmountInput scale={amountScale} rawValue={isAllColumnsView && isInterimView ? row.currentInterimStage : row.priorBalance} onCommit={(value) => updateRow(row.id, isAllColumnsView && isInterimView ? 'currentInterimStage' : 'priorBalance', value)} /></td>
                     <td className={derivedCellClassName}>{isAllColumnsView && isInterimView ? derivedRow.currentInterimShare : derivedRow.priorShare}</td>
-                    <td className={yellowCellClassName}><InventoryAmountInput rawValue={isAllColumnsView && isInterimView ? row.finalPlannedBalance : row.interimPlannedBalance} onCommit={(value) => updateRow(row.id, isAllColumnsView && isInterimView ? 'finalPlannedBalance' : 'interimPlannedBalance', value)} /></td>
+                    <td className={yellowCellClassName}><InventoryAmountInput scale={amountScale} rawValue={isAllColumnsView && isInterimView ? row.finalPlannedBalance : row.interimPlannedBalance} onCommit={(value) => updateRow(row.id, isAllColumnsView && isInterimView ? 'finalPlannedBalance' : 'interimPlannedBalance', value)} /></td>
                     <td className={derivedCellClassName}>{isAllColumnsView && isInterimView ? derivedRow.finalShare : derivedRow.interimShare}</td><td className={derivedCellClassName}>{isAllColumnsView && isInterimView ? derivedRow.finalChange : derivedRow.interimChange}</td>
-                    <td className={yellowCellClassName}><InventoryAmountInput rawValue={isAllColumnsView && isInterimView ? row.priorBalance : row.currentInterimStage} onCommit={(value) => updateRow(row.id, isAllColumnsView && isInterimView ? 'priorBalance' : 'currentInterimStage', value)} /></td>
+                    <td className={yellowCellClassName}><InventoryAmountInput scale={amountScale} rawValue={isAllColumnsView && isInterimView ? row.priorBalance : row.currentInterimStage} onCommit={(value) => updateRow(row.id, isAllColumnsView && isInterimView ? 'priorBalance' : 'currentInterimStage', value)} /></td>
                     <td className={derivedCellClassName}>{isAllColumnsView && isInterimView ? derivedRow.priorShare : derivedRow.currentInterimShare}</td>
                   </>}
+                  {isAllColumnsView && currentAmountColumns.map((column, index) => (
+                    <React.Fragment key={column.field}>
+                      <td className={`${yellowCellClassName} ${index === 0 ? stickyIdentityCellClassName + ' ' + stickyIdentityBoundaryClassName : ''}`} style={index === 0 ? { left: currentAmountColumnLeft } : undefined}>
+                        <InventoryAmountInput scale={amountScale} rawValue={row[column.field]} onCommit={(value) => updateRow(row.id, column.field, value)} />
+                      </td>
+                      <td className={derivedCellClassName}>{derivedRow[column.shareField]}</td>
+                    </React.Fragment>
+                  ))}
                   {(matrixView === 'management' || isAllColumnsView) && <>
-                    <td className={grayCellClassName}><ReadOnlyInventoryValue value={row.systemType} /></td>
                     <td className={grayCellClassName}><WrappedInventorySelect value={row.endingBalanceConfirmation} options={ENDING_BALANCE_CONFIRMATION_OPTIONS} onChange={(value) => handleEndingBalanceConfirmationChange(row.id, value)} /></td>
-                    <td className={grayCellClassName}><ReadOnlyInventoryValue value={row.countMethod} /></td>
+                    <td className={grayCellClassName}><ReadOnlyInventoryValue value={row.systemType} /></td>
                     <td className={grayCellClassName}><WrappedInventorySelect value={row.inventoryCountPlan} options={INVENTORY_COUNT_PLAN_OPTIONS} onChange={(value) => handleInventoryCountPlanChange(row.id, value)} /></td>
-                    <td className={neutralCellClassName}><select className={`${selectClassName} ${getInventorySelectionAlignment(row.thirdPartyStorage)}`} value={row.thirdPartyStorage} onChange={(event) => handleThirdPartyStorageChange(row.id, event.target.value)}>{YES_NO_OPTIONS.map((option) => <option key={option}>{option}</option>)}</select></td>
-                    <td className={neutralCellClassName}><select className={`${selectClassName} ${getInventorySelectionAlignment(row.useExpert)}`} value={row.useExpert} onChange={(event) => updateRow(row.id, 'useExpert', event.target.value)}>{YES_NO_OPTIONS.map((option) => <option key={option}>{option}</option>)}</select></td>
+                    <td className={grayCellClassName}><ReadOnlyInventoryValue value={row.countMethod} /></td>
+                    <td className={neutralCellClassName}><select className={`${yesNoSelectClassName} ${getInventorySelectionAlignment(row.thirdPartyStorage)}`} value={row.thirdPartyStorage} onChange={(event) => handleThirdPartyStorageChange(row.id, event.target.value)}>{YES_NO_OPTIONS.map((option) => <option key={option} value={option}>{option || '-'}</option>)}</select></td>
+                    <td className={neutralCellClassName}><select className={`${yesNoSelectClassName} ${getInventorySelectionAlignment(row.useExpert)}`} value={row.useExpert} onChange={(event) => updateRow(row.id, 'useExpert', event.target.value)}>{YES_NO_OPTIONS.map((option) => <option key={option} value={option}>{option || '-'}</option>)}</select></td>
                   </>}
                   {(matrixView === 'monitoring' || isAllColumnsView) && <>
-                    {matrixView === 'monitoring' && <td className={`${yellowCellClassName} ${stickyIdentityCellClassName} ${stickyIdentityBoundaryClassName}`} style={{ left: currentAmountColumnLeft }}><InventoryAmountInput rawValue={row.finalPlannedBalance} onCommit={(value) => updateRow(row.id, 'finalPlannedBalance', value)} /></td>}
                     <td className={neutralCellClassName}><WrappedInventorySelect value={row.plannedAttendancePrimary} options={ATTENDANCE_FEASIBILITY_OPTIONS} onChange={(value) => handleAttendanceFeasibilityChange(row.id, value)} /></td>
-                    <td className={row.plannedAttendancePrimary === '是' ? neutralCellClassName : grayCellClassName}><select className={`${selectClassName} ${getInventorySelectionAlignment(row.plannedAttendanceSecondary)}`} value={row.plannedAttendanceSecondary} disabled={row.plannedAttendancePrimary !== '是'} onChange={(event) => handleAttendanceDayChange(row.id, event.target.value)}>{row.plannedAttendancePrimary !== '是' && <option value="" />}{ATTENDANCE_DAY_OPTIONS.map((option) => <option key={option}>{option}</option>)}</select></td>
-                    <td className={grayCellClassName}><WrappedInventorySelect value={row.auditApproach} disabled={row.plannedAttendancePrimary !== '是' || row.plannedAttendanceSecondary === INDEPENDENT_ATTENDANCE_VALUE} options={AUDIT_APPROACH_OPTIONS} isOptionDisabled={(option) => isAuditApproachOptionDisabled(row.plannedAttendanceSecondary, option)} onChange={(value) => handleAuditApproachChange(row.id, value)} /></td>
+                    <td className={row.plannedAttendancePrimary === '是' ? neutralCellClassName : grayCellClassName}><AttendanceDaySelect value={row.plannedAttendanceSecondary} disabled={row.plannedAttendancePrimary !== '是'} onChange={(value) => handleAttendanceDayChange(row.id, value)} /></td>
+                    <td className={grayCellClassName}><WrappedInventorySelect value={row.auditApproach} align="left" disabled={row.plannedAttendancePrimary !== '是' || row.plannedAttendanceSecondary === INDEPENDENT_ATTENDANCE_VALUE} options={AUDIT_APPROACH_OPTIONS} isOptionDisabled={(option) => isAuditApproachOptionDisabled(row.plannedAttendanceSecondary, option)} onChange={(value) => handleAuditApproachChange(row.id, value)} /></td>
                     <td className={yellowCellClassName}><input className={inputClassName} value={row.sampleQuantity} onChange={(event) => updateRow(row.id, 'sampleQuantity', event.target.value)} /></td>
                   </>}
-                  {(matrixView === 'arrangements' || isAllColumnsView) && <>
+                  {(matrixView === 'monitoring' || isAllColumnsView) && <>
                     <td className={neutralCellClassName}><WrappedInventorySelect value={allowsThirdPartyEvidence(row.auditApproach) ? row.confirmThirdPartyInventory : '否'} disabled={!allowsThirdPartyEvidence(row.auditApproach)} options={YES_NO_OPTIONS} onChange={(value) => updateRow(row.id, 'confirmThirdPartyInventory', value)} /></td>
                     <td className={grayCellClassName}><WrappedInventorySelect value={row.monitorMode} options={MONITOR_MODE_OPTIONS} onChange={(value) => updateRow(row.id, 'monitorMode', value)} /></td>
+                    <td className={neutralCellClassName}><WrappedInventorySelect value={row.useExperts} options={YES_NO_OPTIONS} onChange={(value) => updateRow(row.id, 'useExperts', value)} /></td>
                     <td className={neutralCellClassName}><WrappedInventorySelect value={row.useInternalAudit} options={YES_NO_OPTIONS} onChange={(value) => updateRow(row.id, 'useInternalAudit', value)} /></td>
                   </>}
                   <td className={`${grayCellClassName} ${stickyRightCellClassName}`}><DerivedInventoryMethodCell row={row} /></td>
                   {/* 操作列暂时隐藏。地点设置和删除行按钮代码保留在版本历史中。 */}
-                </tr>;
+                </StableMatrixRow>;
               })}
-              <tr>
+              <StableMatrixRow>
                 <td className={`border bg-white px-2 py-1 text-center ${stickyIdentityCellClassName}`} style={{ left: identityColumnLefts[0] }}><button type="button" onClick={addRow} className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-600 hover:border-blue-500 hover:text-blue-600" title="新增行"><Plus size={14} /></button></td>
-                {[1, 2, 3, 4].map((columnIndex) => <td key={columnIndex} className={`border bg-white px-2 py-1 ${stickyIdentityCellClassName} ${columnIndex === 4 && !hasStickyCurrentAmount ? stickyIdentityBoundaryClassName : ''}`} style={{ left: identityColumnLefts[columnIndex] }} />)}
+                {[1, 2, 3, 4, 5].map((columnIndex) => <td key={columnIndex} className={`border bg-white px-2 py-1 ${stickyIdentityCellClassName} ${columnIndex === 5 && !hasStickyCurrentAmount ? stickyIdentityBoundaryClassName : ''}`} style={{ left: identityColumnLefts[columnIndex] }} />)}
                 {hasStickyCurrentAmount && <td className={`border bg-white px-2 py-1 ${stickyIdentityCellClassName} ${stickyIdentityBoundaryClassName}`} style={{ left: currentAmountColumnLeft }} />}
-                {Array.from({ length: matrixView === null ? 9 : isAllColumnsView ? 22 : matrixView === 'balance' ? 9 : matrixView === 'management' ? 6 : matrixView === 'arrangements' ? 3 : 4 }, (_, cell) => <td key={cell} className="border bg-white px-2 py-1" />)}
+                {Array.from({ length: matrixView === null ? 9 : isAllColumnsView ? 17 : matrixView === 'balance' ? 9 : matrixView === 'management' ? 6 : 8 }, (_, cell) => <td key={cell} className="border bg-white px-2 py-1" />)}
                 <td className={`border bg-white px-2 py-1 ${stickyRightCellClassName}`} />
                 {/* 操作列暂时隐藏：<td className="border bg-white px-2 py-1" /> */}
-              </tr>
-              <tr>
+              </StableMatrixRow>
+              <StableMatrixRow>
                 <td className={`border bg-black px-2 py-1 ${stickyIdentityCellClassName}`} style={{ left: identityColumnLefts[0] }} />
                 <td className={`border bg-black px-2 py-1 text-center text-[11px] font-semibold text-white ${stickyIdentityCellClassName}`} style={{ left: identityColumnLefts[1] }}>存货总额</td>
-                {[2, 3, 4].map((columnIndex) => <td key={columnIndex} className={`border bg-black px-2 py-1 ${stickyIdentityCellClassName} ${columnIndex === 4 && !hasStickyCurrentAmount ? stickyIdentityBoundaryClassName : ''}`} style={{ left: identityColumnLefts[columnIndex] }} />)}
+                {[2, 3, 4, 5].map((columnIndex) => <td key={columnIndex} className={`border bg-black px-2 py-1 ${stickyIdentityCellClassName} ${columnIndex === 5 && !hasStickyCurrentAmount ? stickyIdentityBoundaryClassName : ''}`} style={{ left: identityColumnLefts[columnIndex] }} />)}
                 {matrixView === null ? <>
-                  <td className={`${calculatedCellClassName} ${stickyIdentityCellClassName} ${stickyIdentityBoundaryClassName}`} style={{ left: currentAmountColumnLeft }}>{formatInventoryTotalAmount(isInterimView ? totalInterimPlannedBalance : totalFinalPlannedBalance)}</td><td className={calculatedCellClassName}>{formatRatio(calculateShare(isInterimView ? totalInterimPlannedBalance : totalFinalPlannedBalance, isInterimView ? totalInterimPlannedBalance : totalFinalPlannedBalance))}</td><td className={calculatedCellClassName}>{formatRatio(isInterimView ? calculateChange(totalCurrentInterimStage !== null && totalInterimPlannedBalance !== null ? totalInterimPlannedBalance - totalCurrentInterimStage : null, totalCurrentInterimStage) : calculateChange(totalFinalPlannedBalance !== null && totalPriorBalance !== null ? totalFinalPlannedBalance - totalPriorBalance : null, totalPriorBalance))}</td>
+                  <td className={`${calculatedCellClassName} ${stickyIdentityCellClassName} ${stickyIdentityBoundaryClassName}`} style={{ left: currentAmountColumnLeft }}>{formatTotalAmount(isInterimView ? totalInterimPlannedBalance : totalFinalPlannedBalance)}</td><td className={calculatedCellClassName}>{formatRatio(calculateShare(isInterimView ? totalInterimPlannedBalance : totalFinalPlannedBalance, isInterimView ? totalInterimPlannedBalance : totalFinalPlannedBalance))}</td><td className={calculatedCellClassName}>{formatRatio(isInterimView ? calculateChange(totalCurrentInterimStage !== null && totalInterimPlannedBalance !== null ? totalInterimPlannedBalance - totalCurrentInterimStage : null, totalCurrentInterimStage) : calculateChange(totalFinalPlannedBalance !== null && totalPriorBalance !== null ? totalFinalPlannedBalance - totalPriorBalance : null, totalPriorBalance))}</td>
                   {Array.from({ length: 7 }, (_, cell) => <td key={cell} className="border bg-black px-2 py-1" />)}
                 </> : matrixView === 'balance' ? <>
-                  <td className={`${calculatedCellClassName} ${stickyIdentityCellClassName} ${stickyIdentityBoundaryClassName}`} style={{ left: currentAmountColumnLeft }}>{formatInventoryTotalAmount(totalFinalPlannedBalance)}</td><td className={calculatedCellClassName}>{formatRatio(calculateShare(totalFinalPlannedBalance, totalFinalPlannedBalance))}</td><td className={calculatedCellClassName}>{formatRatio(calculateChange(totalFinalPlannedBalance !== null && totalPriorBalance !== null ? totalFinalPlannedBalance - totalPriorBalance : null, totalPriorBalance))}</td>
-                  <td className={calculatedCellClassName}>{formatInventoryTotalAmount(totalPriorBalance)}</td><td className={calculatedCellClassName}>{formatRatio(calculateShare(totalPriorBalance, totalPriorBalance))}</td>
-                  <td className={calculatedCellClassName}>{formatInventoryTotalAmount(totalInterimPlannedBalance)}</td><td className={calculatedCellClassName}>{formatRatio(calculateShare(totalInterimPlannedBalance, totalInterimPlannedBalance))}</td><td className={calculatedCellClassName}>{formatRatio(calculateChange(totalCurrentInterimStage !== null && totalInterimPlannedBalance !== null ? totalInterimPlannedBalance - totalCurrentInterimStage : null, totalCurrentInterimStage))}</td>
-                  <td className={calculatedCellClassName}>{formatInventoryTotalAmount(totalCurrentInterimStage)}</td><td className={calculatedCellClassName}>{formatRatio(calculateShare(totalCurrentInterimStage, totalCurrentInterimStage))}</td>
+                  <td className={`${calculatedCellClassName} ${stickyIdentityCellClassName} ${stickyIdentityBoundaryClassName}`} style={{ left: currentAmountColumnLeft }}>{formatTotalAmount(totalFinalPlannedBalance)}</td><td className={calculatedCellClassName}>{formatRatio(calculateShare(totalFinalPlannedBalance, totalFinalPlannedBalance))}</td><td className={calculatedCellClassName}>{formatRatio(calculateChange(totalFinalPlannedBalance !== null && totalPriorBalance !== null ? totalFinalPlannedBalance - totalPriorBalance : null, totalPriorBalance))}</td>
+                  <td className={calculatedCellClassName}>{formatTotalAmount(totalPriorBalance)}</td><td className={calculatedCellClassName}>{formatRatio(calculateShare(totalPriorBalance, totalPriorBalance))}</td>
+                  <td className={calculatedCellClassName}>{formatTotalAmount(totalInterimPlannedBalance)}</td><td className={calculatedCellClassName}>{formatRatio(calculateShare(totalInterimPlannedBalance, totalInterimPlannedBalance))}</td><td className={calculatedCellClassName}>{formatRatio(calculateChange(totalCurrentInterimStage !== null && totalInterimPlannedBalance !== null ? totalInterimPlannedBalance - totalCurrentInterimStage : null, totalCurrentInterimStage))}</td>
+                  <td className={calculatedCellClassName}>{formatTotalAmount(totalCurrentInterimStage)}</td><td className={calculatedCellClassName}>{formatRatio(calculateShare(totalCurrentInterimStage, totalCurrentInterimStage))}</td>
                 </> : isAllColumnsView ? <>
-                  <td className={`${calculatedCellClassName} ${stickyIdentityCellClassName} ${stickyIdentityBoundaryClassName}`} style={{ left: currentAmountColumnLeft }}>{formatInventoryTotalAmount(isInterimView ? totalInterimPlannedBalance : totalFinalPlannedBalance)}</td><td className={calculatedCellClassName}>{formatRatio(calculateShare(isInterimView ? totalInterimPlannedBalance : totalFinalPlannedBalance, isInterimView ? totalInterimPlannedBalance : totalFinalPlannedBalance))}</td><td className={calculatedCellClassName}>{formatRatio(isInterimView ? calculateChange(totalCurrentInterimStage !== null && totalInterimPlannedBalance !== null ? totalInterimPlannedBalance - totalCurrentInterimStage : null, totalCurrentInterimStage) : calculateChange(totalFinalPlannedBalance !== null && totalPriorBalance !== null ? totalFinalPlannedBalance - totalPriorBalance : null, totalPriorBalance))}</td>
-                  <td className={calculatedCellClassName}>{formatInventoryTotalAmount(isInterimView ? totalCurrentInterimStage : totalPriorBalance)}</td><td className={calculatedCellClassName}>{formatRatio(calculateShare(isInterimView ? totalCurrentInterimStage : totalPriorBalance, isInterimView ? totalCurrentInterimStage : totalPriorBalance))}</td>
-                  <td className={calculatedCellClassName}>{formatInventoryTotalAmount(isInterimView ? totalFinalPlannedBalance : totalInterimPlannedBalance)}</td><td className={calculatedCellClassName}>{formatRatio(calculateShare(isInterimView ? totalFinalPlannedBalance : totalInterimPlannedBalance, isInterimView ? totalFinalPlannedBalance : totalInterimPlannedBalance))}</td><td className={calculatedCellClassName}>{formatRatio(isInterimView ? calculateChange(totalFinalPlannedBalance !== null && totalPriorBalance !== null ? totalFinalPlannedBalance - totalPriorBalance : null, totalPriorBalance) : calculateChange(totalCurrentInterimStage !== null && totalInterimPlannedBalance !== null ? totalInterimPlannedBalance - totalCurrentInterimStage : null, totalCurrentInterimStage))}</td>
-                  <td className={calculatedCellClassName}>{formatInventoryTotalAmount(isInterimView ? totalPriorBalance : totalCurrentInterimStage)}</td><td className={calculatedCellClassName}>{formatRatio(calculateShare(isInterimView ? totalPriorBalance : totalCurrentInterimStage, isInterimView ? totalPriorBalance : totalCurrentInterimStage))}</td>
-                  {Array.from({ length: 13 }, (_, cell) => <td key={cell} className="border bg-black px-2 py-1" />)}
-                </> : matrixView === 'monitoring' ? <>
-                  <td className={`${calculatedCellClassName} ${stickyIdentityCellClassName} ${stickyIdentityBoundaryClassName}`} style={{ left: currentAmountColumnLeft }}>{formatInventoryTotalAmount(totalFinalPlannedBalance)}</td>
-                  {Array.from({ length: 4 }, (_, cell) => <td key={cell} className="border bg-black px-2 py-1" />)}
-                </> : Array.from({ length: matrixView === 'management' ? 6 : matrixView === 'arrangements' ? 3 : 4 }, (_, cell) => <td key={cell} className="border bg-black px-2 py-1" />)}
+                  {currentAmountColumns.map((column, index) => (
+                    <React.Fragment key={column.field}>
+                      <td className={`${calculatedCellClassName} ${index === 0 ? stickyIdentityCellClassName + ' ' + stickyIdentityBoundaryClassName : ''}`} style={index === 0 ? { left: currentAmountColumnLeft } : undefined}>{formatTotalAmount(column.total)}</td>
+                      <td className={calculatedCellClassName}>{formatRatio(calculateShare(column.total, column.total))}</td>
+                    </React.Fragment>
+                  ))}
+                  {Array.from({ length: 14 }, (_, cell) => <td key={cell} className="border bg-black px-2 py-1" />)}
+                </> : Array.from({ length: matrixView === 'management' ? 6 : 8 }, (_, cell) => <td key={cell} className="border bg-black px-2 py-1" />)}
                 <td className={`border bg-black px-2 py-1 ${stickyRightCellClassName}`} />
                 {/* 操作列暂时隐藏：<td className="border bg-black px-2 py-1" /> */}
-              </tr>
+              </StableMatrixRow>
             </tbody>
           </table>
           {false && (
@@ -1632,7 +1804,7 @@ export default function InventoryMatrix({
                 )}
                 {isInterimView && (
                   <th className={lightHeaderCellClassName}>
-                    变动幅度
+                    变动<br />幅度
                   </th>
                 )}
                 {isBalanceView && (
@@ -1645,7 +1817,7 @@ export default function InventoryMatrix({
                 )}
                 {isBalanceView && (
                   <th className={lightHeaderCellClassName}>
-                    变动幅度
+                    变动<br />幅度
                   </th>
                 )}
                 </>
@@ -1815,7 +1987,7 @@ export default function InventoryMatrix({
                   <>
                   {isBalanceView && (
                     <td className={yellowCellClassName}>
-                      <InventoryAmountInput
+                      <InventoryAmountInput scale={amountScale}
                         rawValue={row.priorBalance}
                         onCommit={(value) => updateRow(row.id, 'priorBalance', value)}
                       />
@@ -1823,7 +1995,7 @@ export default function InventoryMatrix({
                   )}
                   {isInterimView && (
                     <td className={yellowCellClassName}>
-                      <InventoryAmountInput
+                      <InventoryAmountInput scale={amountScale}
                         rawValue={row.currentInterimStage}
                         onCommit={(value) => updateRow(row.id, 'currentInterimStage', value)}
                       />
@@ -1835,7 +2007,7 @@ export default function InventoryMatrix({
                   {isBalanceView && <td className={derivedCellClassName}>{derivedRow.priorShare}</td>}
                   {isInterimView && (
                     <td className={yellowCellClassName}>
-                      <InventoryAmountInput
+                      <InventoryAmountInput scale={amountScale}
                         rawValue={row.interimPlannedBalance}
                         onCommit={(value) => updateRow(row.id, 'interimPlannedBalance', value)}
                       />
@@ -1845,7 +2017,7 @@ export default function InventoryMatrix({
                   {isInterimView && <td className={derivedCellClassName}>{derivedRow.interimChange}</td>}
                   {isBalanceView && (
                     <td className={yellowCellClassName}>
-                      <InventoryAmountInput
+                      <InventoryAmountInput scale={amountScale}
                         rawValue={row.finalPlannedBalance}
                         onCommit={(value) => updateRow(row.id, 'finalPlannedBalance', value)}
                       />
@@ -1863,7 +2035,7 @@ export default function InventoryMatrix({
                     >
                       {SAMPLE_SELECTION_OPTIONS.map((option) => (
                         <option key={option} value={option}>
-                          {option}
+                          {option || '-'}
                         </option>
                       ))}
                     </select>
@@ -1894,7 +2066,7 @@ export default function InventoryMatrix({
                     >
                       {YES_NO_OPTIONS.map((option) => (
                         <option key={option} value={option}>
-                          {option}
+                          {option || '-'}
                         </option>
                       ))}
                     </select>
@@ -1932,7 +2104,7 @@ export default function InventoryMatrix({
                     >
                       {YES_NO_OPTIONS.map((option) => (
                         <option key={option} value={option}>
-                          {option}
+                          {option || '-'}
                         </option>
                       ))}
                     </select>
@@ -2000,10 +2172,10 @@ export default function InventoryMatrix({
                 {showAmountColumns && (
                 <>
                 {isBalanceView && (
-                  <td className={calculatedCellClassName}>{formatInventoryTotalAmount(totalPriorBalance)}</td>
+                  <td className={calculatedCellClassName}>{formatTotalAmount(totalPriorBalance)}</td>
                 )}
                 {isInterimView && (
-                  <td className={calculatedCellClassName}>{formatInventoryTotalAmount(totalCurrentInterimStage)}</td>
+                  <td className={calculatedCellClassName}>{formatTotalAmount(totalCurrentInterimStage)}</td>
                 )}
                 {isInterimView && (
                   <td className={calculatedCellClassName}>
@@ -2017,7 +2189,7 @@ export default function InventoryMatrix({
                 )}
                 {isInterimView && (
                   <td className={calculatedCellClassName}>
-                    {formatInventoryTotalAmount(totalInterimPlannedBalance)}
+                    {formatTotalAmount(totalInterimPlannedBalance)}
                   </td>
                 )}
                 {isInterimView && (
@@ -2038,7 +2210,7 @@ export default function InventoryMatrix({
                   </td>
                 )}
                 {isBalanceView && (
-                  <td className={calculatedCellClassName}>{formatInventoryTotalAmount(totalFinalPlannedBalance)}</td>
+                  <td className={calculatedCellClassName}>{formatTotalAmount(totalFinalPlannedBalance)}</td>
                 )}
                 {isBalanceView && (
                   <td className={calculatedCellClassName}>
@@ -2071,7 +2243,7 @@ export default function InventoryMatrix({
             </tbody>
           </table>
           )}
-        </div>
+        </InventoryMatrixScrollArea>
         {shouldShowInventoryPagination && (
           <div className="flex items-center justify-end gap-2 border-t border-gray-100 px-3 py-2 text-xs text-slate-600">
             <span>
@@ -2125,19 +2297,19 @@ export default function InventoryMatrix({
         {isBulkEditOpen && (
           <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/35 p-4" role="presentation">
             <div
-              className="w-full max-w-3xl overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl"
+              className="flex max-h-[calc(100dvh-2rem)] w-full max-w-3xl flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl"
               role="dialog"
               aria-modal="true"
               aria-labelledby="inventory-bulk-edit-title"
             >
-              <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
+              <div className="flex shrink-0 items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
                 <div>
                   <h3 id="inventory-bulk-edit-title" className="text-base font-semibold text-slate-900">批量编辑</h3>
                   <p className="mt-1 text-xs text-slate-500">已选择 {selectedRowIds.length} 行。仅实际修改的字段会应用到这些地点。</p>
                 </div>
                 <button type="button" onClick={() => setIsBulkEditOpen(false)} className="inline-flex h-7 w-7 items-center justify-center rounded text-lg leading-none text-slate-400 hover:bg-slate-100 hover:text-slate-700" aria-label="关闭批量编辑">×</button>
               </div>
-              <div className="border-b border-slate-200 px-5 py-3">
+              <div className="shrink-0 border-b border-slate-200 px-5 py-3">
                 <div className="flex items-center justify-between gap-4">
                   <button
                     type="button"
@@ -2167,7 +2339,7 @@ export default function InventoryMatrix({
                   </div>
                 </div>
                 {isBulkEditLocationsExpanded && (
-                  <div className="mt-2 grid grid-cols-2 gap-2 rounded-lg bg-slate-50/70 px-3 py-1.5">
+                  <div className="inventory-bulk-location-scroll mt-2 grid max-h-[316px] grid-cols-2 auto-rows-[44px] gap-2 overflow-y-auto overscroll-contain rounded-lg bg-slate-50/70 px-3 py-1.5">
                     {selectedRowsForBulkEdit.map((row, index) => (
                       <div key={row.id} className="relative grid min-w-0 grid-cols-[18px_minmax(0,1fr)] items-center gap-2 rounded-md border border-slate-100 bg-white py-1.5 pl-2 pr-7 text-[11px] leading-4 shadow-[0_1px_1px_rgba(15,23,42,0.03)]">
                         <span className="text-[10px] text-slate-400">{index + 1}</span>
@@ -2193,7 +2365,7 @@ export default function InventoryMatrix({
                   </div>
                 )}
               </div>
-              <div className="grid max-h-[62vh] grid-cols-2 gap-x-5 overflow-y-auto px-5 py-4">
+              <div className="grid min-h-0 grid-cols-2 gap-x-5 overflow-y-auto px-5 py-4">
                 {(['left', 'right'] as const).map((side) => (
                   <section key={side} className="min-w-0">
                     <div className="space-y-3">
@@ -2294,7 +2466,7 @@ export default function InventoryMatrix({
                                       isAuditApproachOptionDisabled(bulkEditValues.plannedAttendanceSecondary, option)
                                     }
                                   >
-                                    {option}
+                                    {option || '-'}
                                   </option>
                                 ))}
                               </select>
@@ -2303,7 +2475,7 @@ export default function InventoryMatrix({
                                 type="text"
                                 value={bulkEditValues[config.field]}
                                 onChange={(event) => updateBulkEditValue(event.target.value)}
-                                placeholder="请输入样本数量"
+                                placeholder="请输入抽盘数量"
                                 className="h-8 w-full rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-blue-400 focus:ring-1 focus:ring-blue-100"
                               />
                             )}
@@ -2320,7 +2492,7 @@ export default function InventoryMatrix({
                   </section>
                 ))}
               </div>
-              <div className="flex items-center justify-end gap-2 border-t border-slate-200 bg-slate-50 px-5 py-3">
+              <div className="flex shrink-0 items-center justify-end gap-2 border-t border-slate-200 bg-slate-50 px-5 py-3">
                 <button type="button" onClick={() => setIsBulkEditOpen(false)} className="rounded-md border border-slate-300 bg-white px-4 py-2 text-xs font-medium text-slate-600 hover:bg-slate-100">取消</button>
                 <button type="button" onClick={applyBulkEdits} disabled={enabledBulkEditFields.length === 0} className="rounded-md border border-[#00338D] bg-[#00338D] px-4 py-2 text-xs font-medium text-white hover:bg-[#002b75] disabled:cursor-not-allowed disabled:border-slate-300 disabled:bg-slate-300">确定</button>
               </div>

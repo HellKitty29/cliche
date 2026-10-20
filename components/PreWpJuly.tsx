@@ -5,8 +5,9 @@
  */
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { LoginOutlined } from '@ant-design/icons';
-import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Download, Edit3, ExternalLink, Save, Upload } from 'lucide-react';
+import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Download, Edit3, ExternalLink, Save, Upload, X, ZoomIn, ZoomOut } from 'lucide-react';
 import InventoryMatrix, {
   INITIAL_INVENTORY_MATRIX_ROWS,
   createInventoryMatrixRow,
@@ -23,6 +24,8 @@ import { parseChineseAddress } from '../utils/addressParser';
 
 type AttachCompletion = '' | 'completed' | 'not-applicable';
 type Language = 'zh' | 'en';
+
+const INVENTORY_CONSIDERATION_HEADING_CLASS_NAME = 'text-base font-bold leading-6 text-[#00338D]';
 
 type TaskDetail = {
   label: string;
@@ -49,7 +52,17 @@ type PreWpJulyStage = 'understand' | 'method' | 'plan';
 interface PreWpJulyProps {
   onBack?: () => void;
   taskId?: string;
+  menuOpen?: boolean;
+  showCompactNavigation?: boolean;
+  showOverview?: boolean;
+  onMenuClose?: () => void;
 }
+
+const JULY_NAV_STAGES: Array<{ key: PreWpJulyStage; label: string }> = [
+  { key: 'method', label: '了解被审计单位的存货' },
+  { key: 'understand', label: '存货了解矩阵' },
+  { key: 'plan', label: '存货监盘方法' },
+];
 
 const cn = (...classes: Array<string | false | null | undefined>) =>
   classes.filter(Boolean).join(' ');
@@ -88,6 +101,242 @@ const PRE_WP_JULY_STEP_REFERENCES = Object.freeze({
     workflow: Object.freeze([{ name: '3.1 业务流程 - 了解有关情况' }]),
   }),
 });
+
+const KAEG_LIBRARY_URL = 'https://spo-global.kpmg.com/sites/cn-oi-svc-AUD/KAEG/Forms/AllItems.aspx';
+const KAEG_MORE_INFO_URL = 'https://spo-global.kpmg.com/sites/cn-oi-svc-AUD/SitePages/DPPAudit_KAEG2025.aspx';
+const INVENTORY_GUIDE_PAGE_BASE_URL = '/reference/inventory-count-guide';
+
+function formatInventoryGuideText(text: string) {
+  const paragraphs: string[] = [];
+  let paragraph = '';
+  const flush = () => {
+    if (paragraph) paragraphs.push(paragraph);
+    paragraph = '';
+  };
+
+  for (const rawLine of text.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line) {
+      flush();
+      continue;
+    }
+    if (line.startsWith('©')) {
+      flush();
+      paragraphs.push(line);
+      continue;
+    }
+    if (/^(?:\d+[)）.]|QRC#|Page \d)/.test(line)) flush();
+    if (paragraph && /[。；：:！？]$/.test(paragraph)) flush();
+    paragraph += line;
+  }
+  flush();
+  return paragraphs.join('\n\n');
+}
+
+type InventoryNatureAnswers = Record<number, 'yes' | 'no'>;
+
+function InventoryNatureQuestions({ answers, setAnswers, group = 'general' }: {
+  answers: InventoryNatureAnswers;
+  setAnswers: React.Dispatch<React.SetStateAction<InventoryNatureAnswers>>;
+  group?: 'general' | 'before-policy';
+}) {
+  const [previewPages, setPreviewPages] = useState<readonly number[] | null>(null);
+  const [previewMode, setPreviewMode] = useState<'image' | 'text'>('image');
+  const [previewZoom, setPreviewZoom] = useState(1);
+  const [guidePageText, setGuidePageText] = useState<Record<string, string> | null>(null);
+  const [guideTextError, setGuideTextError] = useState(false);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch(`${INVENTORY_GUIDE_PAGE_BASE_URL}/pages-text.json`, { signal: controller.signal })
+      .then((response) => {
+        if (!response.ok) throw new Error('Guide text unavailable');
+        return response.json() as Promise<Record<string, string>>;
+      })
+      .then(setGuidePageText)
+      .catch((error: unknown) => {
+        if (error instanceof Error && error.name === 'AbortError') return;
+        setGuideTextError(true);
+      });
+    return () => controller.abort();
+  }, []);
+
+  const openPreview = (pages: readonly number[]) => {
+    setPreviewPages(pages);
+    setPreviewZoom(1);
+  };
+
+  const closePreview = () => {
+    setPreviewPages(null);
+  };
+
+  useEffect(() => {
+    if (!previewPages) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') closePreview();
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [previewPages]);
+
+  const pageLabel = (pages: readonly number[]) => pages.join(pages.length === 2 ? ' & ' : '、');
+
+  const documentLink = (title: string) => (
+    <a
+      href={KAEG_LIBRARY_URL}
+      target="_blank"
+      rel="noopener noreferrer"
+      title="打开 KAEG 文档库查找该文件"
+      className="rounded-sm font-medium text-[#2c547d] no-underline transition hover:bg-sky-100 hover:text-lime-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#00338D]"
+    >
+      {title}
+      <ExternalLink size={12} className="ml-1 inline-block align-baseline" aria-hidden="true" />
+    </a>
+  );
+
+  const guideButton = (pages: readonly number[]) => (
+    <button
+      type="button"
+      onClick={() => openPreview(pages)}
+      aria-label={`预览指导文件第 ${pageLabel(pages)} 页`}
+      className="ml-1 inline-block align-baseline rounded-md border border-slate-400 px-2 text-sm font-medium leading-5 text-[#2c547d] transition hover:bg-sky-100 hover:text-cyan-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#00338D]"
+    >
+      指导文件
+    </button>
+  );
+
+  const questions: Array<{ number: number; content: React.ReactNode; recordInQuestion: string; note?: React.ReactNode }> = [
+    {
+      number: 1,
+      content: '被审计单位的存货是否存放在多个地点？',
+      note: <><div>下载{documentLink('KAEG-I：国际审计准则第530号——审计抽样')}，阅读 1.1.7 确定针对多个地点的实质性抽样方法，必要时寻求协助，完成相关计划工作。</div><div>针对存货存放地点清单的完整性，查看项目组可以执行哪些审计程序 {guideButton([16, 17])}</div></>,
+      recordInQuestion: '3',
+    },
+    {
+      number: 2,
+      content: '被审计单位是否聘请外部专业机构（例如专业测量公司）协助进行存货盘点？',
+      note: <><div>下载获取{documentLink('KAEG-I：国际审计准则第620号——利用审计师的专家的工作')}，了解更多相关信息</div><div>针对利用外部专业机构，查看项目组如何利用并取代哪些存货监盘程序 {guideButton([12, 13, 14])}</div></>,
+      recordInQuestion: '3',
+    },
+    {
+      number: 3,
+      content: '项目组是否识别到被审计单位持有在产品？',
+      note: <>查看如何监盘上述类型的存货 {guideButton([52])}</>,
+      recordInQuestion: '3',
+    },
+    {
+      number: 4,
+      content: '项目组是否识别到被审计单位持有所有权不属于被审计单位的存货以及在途存货？',
+      note: <>查看如何处理上述类型的存货 {guideButton([54])}</>,
+      recordInQuestion: '3',
+    },
+    {
+      number: 5,
+      content: '被审计单位是否拥有高度自动化仓库？',
+      note: <>查看项目组如何应对 {guideButton([64])}</>,
+      recordInQuestion: '3',
+    },
+    {
+      number: 6,
+      content: '被审计单位是否已执行了一系列自动化程序来协助盘点？',
+      recordInQuestion: '4',
+    },
+    {
+      number: 7,
+      content: '项目组是否识别到无法用标签予以标识、数量难以估计或质量难以确定的特殊类型存货（如矿石堆、稀有玉石、林木、原油等）？',
+      note: <>查看如何开展存货监盘，涉及的相关计量或估计方法 {guideButton([38])}</>,
+      recordInQuestion: '5 & 6',
+    },
+    {
+      number: 8,
+      content: '项目组是否识别到其他特殊类型的存货？',
+      note: <>查看如何开展存货监盘，涉及的相关计量或估计方法 {guideButton([42, 44])}</>,
+      recordInQuestion: '5 & 6',
+    },
+  ];
+
+  return <>
+    <ul aria-label="存货性质与存货监盘考虑事项" className="space-y-4 py-3 text-sm text-slate-800">
+      {questions.filter((question) => group === 'before-policy' ? [2, 6].includes(question.number) : ![2, 6].includes(question.number)).map((question) => (
+        <li key={question.number}>
+          <div className="min-w-0 leading-6">
+            <div className="font-semibold">{question.content}</div>
+            {question.note && <div className="mt-1">{question.note}</div>}
+            <div className="mt-2">
+              <fieldset className="inline-flex flex-wrap items-center gap-x-10 gap-y-1">
+                <legend className="sr-only">{question.content} 是否</legend>
+                {(['yes', 'no'] as const).map((answer) => (
+                  <label key={answer} className="inline-flex cursor-pointer items-center gap-1.5 text-sm">
+                    <input
+                      type="radio"
+                      name={`inventory-nature-question-${question.number}`}
+                      value={answer}
+                      checked={answers[question.number] === answer}
+                      onChange={() => setAnswers((current) => ({ ...current, [question.number]: answer }))}
+                      className="h-4 w-4 shrink-0 accent-[#00338D] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#00338D]"
+                    />
+                    <span className={cn('font-medium transition-colors', answers[question.number] === answer ? 'font-semibold text-[#00338D]' : 'text-slate-600 hover:text-[#00338D]')}>
+                      {answer === 'yes' ? `是，记录在问题${question.recordInQuestion}` : '否'}
+                    </span>
+                  </label>
+                ))}
+              </fieldset>
+            </div>
+          </div>
+        </li>
+      ))}
+    </ul>
+    {previewPages && createPortal(
+      <div onClick={closePreview} className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/25 p-3 backdrop-blur-md sm:p-6">
+        <section
+          role="dialog"
+          aria-label={`指导文件第 ${pageLabel(previewPages)} 页预览`}
+          onClick={(event) => event.stopPropagation()}
+          className="flex max-h-[88vh] w-full max-w-[1060px] flex-col overflow-hidden rounded-xl border border-white/80 bg-white shadow-[0_24px_80px_rgba(15,23,42,0.28)]"
+        >
+          <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3 sm:px-5">
+            <div>
+              <h3 className="text-sm font-semibold text-slate-800">指导文件 · Page {pageLabel(previewPages)}</h3>
+              <p className="mt-0.5 text-xs text-slate-300">共 {previewPages.length} 页 · 可切换原版图片和可选中文字</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <div role="group" aria-label="预览显示方式" className="inline-flex rounded-md border border-slate-200 bg-slate-50 p-0.5 text-xs">
+                {(['image', 'text'] as const).map((mode) => <button
+                  key={mode}
+                  type="button"
+                  onClick={() => setPreviewMode(mode)}
+                  aria-pressed={previewMode === mode}
+                  className={cn('rounded px-2.5 py-1 font-medium transition', previewMode === mode ? 'bg-white text-[#00338D] shadow-sm' : 'text-slate-500 hover:text-slate-800')}
+                >{mode === 'image' ? '原版图片' : '提取文字'}</button>)}
+              </div>
+              <div role="group" aria-label="预览缩放" className="inline-flex items-center gap-1 text-xs text-slate-600">
+                <button type="button" onClick={() => setPreviewZoom((zoom) => Math.max(0.75, zoom - 0.25))} disabled={previewZoom <= 0.75} aria-label="缩小预览" className="rounded p-1 hover:bg-slate-100 disabled:opacity-40"><ZoomOut size={16} /></button>
+                <span className="w-9 text-center tabular-nums">{Math.round(previewZoom * 100)}%</span>
+                <button type="button" onClick={() => setPreviewZoom((zoom) => Math.min(2, zoom + 0.25))} disabled={previewZoom >= 2} aria-label="放大预览" className="rounded p-1 hover:bg-slate-100 disabled:opacity-40"><ZoomIn size={16} /></button>
+              </div>
+              <button type="button" onClick={closePreview} aria-label="关闭指导文件预览" className="rounded-md p-1.5 text-slate-500 transition hover:bg-slate-100 hover:text-slate-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#00338D]">
+                <X size={18} aria-hidden="true" />
+              </button>
+            </div>
+          </div>
+          <div className="min-h-0 overflow-auto bg-slate-100/80 p-2 sm:p-4">
+            <div className="mx-auto space-y-4" style={previewMode === 'image' ? { width: `${previewZoom * 100}%` } : undefined}>
+              {previewMode === 'image' ? previewPages.map((page) => <figure key={page} className="overflow-hidden rounded-md bg-white shadow-sm">
+                <img src={`${INVENTORY_GUIDE_PAGE_BASE_URL}/page-${page}.png`} alt={`指导文件 PDF 第 ${page} 页`} className="block h-auto w-full" />
+              </figure>) : previewPages.map((page) => <section key={page} aria-label={`第 ${page} 页提取文字`} className="rounded-md bg-white px-5 py-5 shadow-sm sm:px-8">
+                <h4 className="mb-3 border-b border-slate-100 pb-2 text-xs font-semibold text-[#00338D]">第 {page} 页</h4>
+                <div className="whitespace-pre-wrap break-words text-slate-800" style={{ fontSize: `${15 * previewZoom}px`, lineHeight: 1.8 }}>
+                  {guidePageText?.[String(page)] ? formatInventoryGuideText(guidePageText[String(page)]) : (guideTextError ? '文字提取暂不可用，请查看原版图片。' : '正在读取文字…')}
+                </div>
+              </section>)}
+            </div>
+          </div>
+        </section>
+      </div>,
+      document.body
+    )}
+  </>;
+}
 
 const PRE_WP_JULY_STEP_NOTE_PLACEHOLDERS: Partial<Record<number, string>> = {};
 
@@ -259,35 +508,40 @@ const buildInventoryRowFromMethodPlanRow = (row: MethodPlanRow) => ({
   intervieweeName: row.companyOwner ?? '',
   selectedAsSample: row.selectedAsSample ?? '',
   category: row.importedCategory ?? '',
+  otherCharacteristics: row.importedOtherCharacteristics ?? '',
   endingBalanceConfirmation:
     row.importedEndingBalanceConfirmation ??
     (row.importedSystemType === '定期盘存系统'
       ? '期末存货余额通过期末实施的实地盘点结果来确定'
-      : '期末存货余额通过存货出入库和移动的记录来确认'),
-  systemType: row.importedSystemType ?? '永续盘存系统',
-  thirdPartyStorage: row.importedThirdPartyStorage ?? '否',
+      : row.importedSystemType === '永续盘存系统'
+        ? '期末存货余额通过存货出入库和移动的记录来确认'
+        : ''),
+  systemType: row.importedSystemType ?? '',
+  thirdPartyStorage: row.importedThirdPartyStorage ?? '',
   inventoryCountPlan:
     row.importedInventoryCountPlan ??
     (row.countMethod === '在非期末时点完成盘点'
       ? '在期末以外的特定日期实施的、盘点对象为整个存货总体的实地存货盘点'
       : row.countMethod === '循环盘点'
         ? '在整个会计期间内，定期进行的存货盘点'
-        : '在期末实施的、盘点对象为整个存货总体的实地存货盘点'),
-  countMethod: row.countMethod ?? '在期末完成盘点',
-  useExpert: row.importedUseExpert ?? '否',
+        : row.countMethod === '在期末完成盘点'
+          ? '在期末实施的、盘点对象为整个存货总体的实地存货盘点'
+          : ''),
+  countMethod: row.countMethod === '从下拉菜单选择' ? '' : row.countMethod ?? '',
+  useExpert: row.importedUseExpert ?? '',
   priorBalance: row.importedPriorBalance ?? '',
   finalPlannedBalance: row.importedFinalBalance ?? '',
   currentInterimStage: row.importedPriorInterimPlannedBalance ?? '',
   interimPlannedBalance: row.importedInterimPlannedBalance ?? '',
-  plannedAttendancePrimary: '是',
-  plannedAttendanceSecondary: row.auditApproach === '独立盘点方案' ? '否，项目组采取独立盘点' : '是',
+  plannedAttendancePrimary: row.importedPlannedAttendancePrimary ?? (row.auditApproach && row.auditApproach !== '从下拉菜单选择' ? '是' : ''),
+  plannedAttendanceSecondary: row.importedPlannedAttendanceSecondary ?? (row.auditApproach === '独立盘点方案' ? '否，项目组采取独立盘点' : row.auditApproach && row.auditApproach !== '从下拉菜单选择' ? '是' : ''),
   auditApproach: row.auditApproach ?? '从下拉菜单选择',
   sampleQuantity: row.sampleQuantity ?? '',
   confirmedInventoryMethod: '从下拉菜单选择',
-  confirmThirdPartyInventory: row.confirmThirdPartyInventory ?? '否',
+  confirmThirdPartyInventory: row.confirmThirdPartyInventory ?? '',
   monitorMode: row.monitorMode ?? '从下拉菜单选择',
-  useExperts: row.useExperts ?? '否',
-  useInternalAudit: row.useInternalAudit ?? '否',
+  useExperts: row.useExperts ?? '',
+  useInternalAudit: row.useInternalAudit ?? '',
 });
 
 const EMPTY_INVENTORY_IMPORT_ROW = createInventoryMatrixRow('');
@@ -299,6 +553,7 @@ const hasInventoryImportContent = (
     | 'companyName'
     | 'intervieweeName'
     | 'category'
+    | 'otherCharacteristics'
     | 'endingBalanceConfirmation'
     | 'systemType'
     | 'thirdPartyStorage'
@@ -323,6 +578,7 @@ const hasInventoryImportContent = (
     row.companyName,
     row.intervieweeName,
     row.category,
+    row.otherCharacteristics ?? '',
     row.priorBalance,
     row.currentInterimStage,
     row.interimPlannedBalance,
@@ -374,6 +630,7 @@ const buildMethodPlanRowFromInventoryRow = (
     district: parsedAddress.district,
     address: parsedAddress.fullAddress,
     importedCategory: inventoryRow.category,
+    importedOtherCharacteristics: inventoryRow.otherCharacteristics ?? '',
     importedEndingBalanceConfirmation: inventoryRow.endingBalanceConfirmation,
     importedSystemType: inventoryRow.systemType,
     importedThirdPartyStorage: inventoryRow.thirdPartyStorage,
@@ -520,11 +777,7 @@ function PreWpJulyCompactStepIndicator({
   onSave: () => void;
   saved: boolean;
 }) {
-  const stages: Array<{ key: PreWpJulyStage; label: string }> = [
-    { key: 'method', label: '了解被审计单位的存货' },
-    { key: 'understand', label: '存货了解矩阵' },
-    { key: 'plan', label: '确定项目组的存货监盘方法' },
-  ];
+  const stages = JULY_NAV_STAGES;
 
   return (
     <nav
@@ -576,20 +829,44 @@ function PreWpJulyCompactStepIndicator({
 function StepProcedureCell({
   step,
   children,
+  showInventoryNatureQuestions = false,
+  inventoryNatureAnswers,
+  setInventoryNatureAnswers,
 }: {
   step: StepItem;
   children?: React.ReactNode;
+  showInventoryNatureQuestions?: boolean;
+  inventoryNatureAnswers?: InventoryNatureAnswers;
+  setInventoryNatureAnswers?: React.Dispatch<React.SetStateAction<InventoryNatureAnswers>>;
 }) {
+  const [areInventoryNatureQuestionsCollapsed, setAreInventoryNatureQuestionsCollapsed] = useState(false);
   return (
-    <div className="space-y-1">
+    <div className="relative space-y-1">
       <div className="font-medium leading-6 text-gray-800">
-        <span className="inline-flex flex-wrap items-start gap-1">
-          <span className={cn('whitespace-pre-line', step.id === 1 && 'font-bold')}>{step.displayNumber !== undefined ? `${step.displayNumber}. ` : ''}{step.procedure}</span>
-          <span className="inline-flex items-center gap-1 pt-1">
+        {step.displayNumber !== undefined && (
+          <span className="absolute -left-6 top-0 w-5 text-right font-medium leading-6 text-gray-800">{step.displayNumber}.<sup className="absolute -right-1 top-0 text-[10px] leading-none text-red-500" aria-hidden="true">*</sup><span className="sr-only">（必填）</span></span>
+        )}
+        <span className={cn([4, 5].includes(step.id) ? 'inline' : 'inline-flex flex-wrap items-start gap-1')}>
+          <span className={cn('whitespace-pre-line', step.id === 1 && INVENTORY_CONSIDERATION_HEADING_CLASS_NAME)}>
+            {step.procedure}
+          </span>
+          <span className={cn('inline-flex items-center gap-1', [4, 5].includes(step.id) ? 'ml-1 align-middle' : 'pt-1')}>
             {step.kaeg.map((item, index) => (
               <KButton key={`${step.id}-kaeg-${index}`} label={item} />
             ))}
           </span>
+          {showInventoryNatureQuestions && (
+            <button
+              type="button"
+              onClick={() => setAreInventoryNatureQuestionsCollapsed((current) => !current)}
+              aria-label={areInventoryNatureQuestionsCollapsed ? '展开存货性质子题目' : '收起存货性质子题目'}
+              aria-expanded={!areInventoryNatureQuestionsCollapsed}
+              aria-controls="inventory-nature-questions"
+              className="ml-2 inline-flex h-5 w-5 align-middle items-center justify-center rounded text-slate-500 transition hover:bg-slate-100 hover:text-[#00338D] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#00338D]"
+            >
+              {areInventoryNatureQuestionsCollapsed ? <ChevronDown size={15} aria-hidden="true" /> : <ChevronUp size={15} aria-hidden="true" />}
+            </button>
+          )}
         </span>
       </div>
       {(step.id === 2 || step.id === 7) && <div className="space-y-0.5">
@@ -608,6 +885,11 @@ function StepProcedureCell({
           ))
         ) : null}
       </div>}
+      {showInventoryNatureQuestions && inventoryNatureAnswers && setInventoryNatureAnswers && (
+        <div id="inventory-nature-questions" hidden={areInventoryNatureQuestionsCollapsed}>
+          <InventoryNatureQuestions answers={inventoryNatureAnswers} setAnswers={setInventoryNatureAnswers} />
+        </div>
+      )}
       {children}
     </div>
   );
@@ -907,28 +1189,80 @@ function StepTwoGuidanceCard({
   );
 }
 
-export default function PreWpJuly({ onBack, taskId }: PreWpJulyProps) {
-  const [attachmentCompletion, setAttachmentCompletion] = useState<Record<number, AttachCompletion>>({});
-  const [language, setLanguage] = useState<Language>('zh');
-  const [inventoryStepsSaved, setInventoryStepsSaved] = useState(false);
+type JulyDraft = {
+  attachmentCompletion: Record<number, AttachCompletion>;
+  language: Language;
+  inventoryPolicyFileName: string;
+  inventoryQualityFileName: string;
+  methodFileName: string;
+  inventoryMatrixRows: InventoryMatrixRow[];
+  methodPlanRows: MethodPlanRow[];
+  methodPlanStepFiles: Record<number, string>;
+  methodPlanStepNotes: Record<number, string>;
+  entityRiskLevel: string;
+  entityIndustry: string;
+  entityIndustrySegment: string;
+  interimInventoryTotal: string;
+  yearEndInventoryTotal: string;
+  stepTwoSelections: Record<string, string[]>;
+  inventoryNatureAnswers: InventoryNatureAnswers;
+  isStepTwoConfirmed: boolean;
+  hasConfirmedKoicPush: boolean;
+  publishedMethodPlanRows: MethodPlanRow[];
+};
+
+function readJulyDraft(key: string): Partial<JulyDraft> | null {
+  try {
+    const saved = JSON.parse(localStorage.getItem(key) || 'null');
+    return saved?.version === 1 && saved.data && typeof saved.data === 'object'
+      ? saved.data : null;
+  } catch {
+    return null;
+  }
+}
+
+export default function PreWpJuly({ onBack, taskId, menuOpen = false, showCompactNavigation = true, showOverview = false, onMenuClose }: PreWpJulyProps) {
+  const draftKey = `wp-for-july:draft:1325146:${taskId || 'default'}`;
+  const [savedDraft] = useState(() => readJulyDraft(draftKey));
+  const [saveError, setSaveError] = useState('');
+  const menuRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (!menuOpen) return;
+    menuRef.current?.querySelector<HTMLButtonElement>('[aria-current="step"]')?.focus({ preventScroll: true });
+    const closeMenu = () => {
+      onMenuClose?.();
+      document.getElementById('wp-july-menu-button')?.focus({ preventScroll: true });
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') closeMenu();
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [menuOpen, onMenuClose]);
+  const [attachmentCompletion, setAttachmentCompletion] = useState<Record<number, AttachCompletion>>(savedDraft?.attachmentCompletion ?? {});
+  const [language, setLanguage] = useState<Language>(savedDraft?.language ?? 'zh');
+  const [inventoryStepsSaved, setInventoryStepsSaved] = useState(Boolean(savedDraft));
   const [uploadModalTarget, setUploadModalTarget] = useState<UploadTarget | null>(null);
   const [pendingFileName, setPendingFileName] = useState('');
-  const [inventoryPolicyFileName, setInventoryPolicyFileName] = useState('');
-  const [inventoryQualityFileName, setInventoryQualityFileName] = useState('');
-  const [methodFileName, setMethodFileName] = useState('');
+  const [inventoryPolicyFileName, setInventoryPolicyFileName] = useState(savedDraft?.inventoryPolicyFileName ?? '');
+  const [inventoryQualityFileName, setInventoryQualityFileName] = useState(savedDraft?.inventoryQualityFileName ?? '');
+  const [methodFileName, setMethodFileName] = useState(savedDraft?.methodFileName ?? '');
   const [inventoryMatrixRows, setInventoryMatrixRows] = useState<InventoryMatrixRow[]>(
-    INITIAL_INVENTORY_MATRIX_ROWS
+    savedDraft?.inventoryMatrixRows ?? INITIAL_INVENTORY_MATRIX_ROWS
   );
-  const [methodPlanRows, setMethodPlanRows] = useState<MethodPlanRow[]>([]);
-  const [methodPlanStepFiles, setMethodPlanStepFiles] = useState<Record<number, string>>({});
-  const [methodPlanStepNotes, setMethodPlanStepNotes] = useState<Record<number, string>>({});
-  const [entityRiskLevel, setEntityRiskLevel] = useState('');
-  const [entityIndustry, setEntityIndustry] = useState('');
-  const [entityIndustrySegment, setEntityIndustrySegment] = useState('');
-  const [interimInventoryTotal, setInterimInventoryTotal] = useState('');
-  const [yearEndInventoryTotal, setYearEndInventoryTotal] = useState('');
-  const [stepTwoSelections, setStepTwoSelections] = useState<Record<string, string[]>>({});
-  const [isStepTwoConfirmed, setIsStepTwoConfirmed] = useState(false);
+  const [methodPlanRows, setMethodPlanRows] = useState<MethodPlanRow[]>(savedDraft?.methodPlanRows ?? []);
+  const [methodPlanStepFiles, setMethodPlanStepFiles] = useState<Record<number, string>>(savedDraft?.methodPlanStepFiles ?? {});
+  const [methodPlanStepNotes, setMethodPlanStepNotes] = useState<Record<number, string>>(savedDraft?.methodPlanStepNotes ?? {});
+  const [entityRiskLevel, setEntityRiskLevel] = useState(savedDraft?.entityRiskLevel ?? '');
+  const [entityIndustry, setEntityIndustry] = useState(savedDraft?.entityIndustry ?? '');
+  const [entityIndustrySegment, setEntityIndustrySegment] = useState(savedDraft?.entityIndustrySegment ?? '');
+  const [interimInventoryTotal, setInterimInventoryTotal] = useState(savedDraft?.interimInventoryTotal ?? '');
+  const [yearEndInventoryTotal, setYearEndInventoryTotal] = useState(savedDraft?.yearEndInventoryTotal ?? '');
+  const [stepTwoSelections, setStepTwoSelections] = useState<Record<string, string[]>>(savedDraft?.stepTwoSelections ?? {});
+  const [inventoryNatureAnswers, setInventoryNatureAnswers] = useState<InventoryNatureAnswers>(savedDraft?.inventoryNatureAnswers ?? {});
+  const [isStepTwoConfirmed, setIsStepTwoConfirmed] = useState(savedDraft?.isStepTwoConfirmed ?? false);
   const [isStepTwoCollapsed, setIsStepTwoCollapsed] = useState(false);
   const [activeStepTwoCard, setActiveStepTwoCard] = useState<0 | 1>(0);
   const [stepTwoCarouselHeight, setStepTwoCarouselHeight] = useState<number | null>(null);
@@ -936,8 +1270,30 @@ export default function PreWpJuly({ onBack, taskId }: PreWpJulyProps) {
   const [isWorkpaperIntroCollapsed, setIsWorkpaperIntroCollapsed] = useState(true);
   const [isMethodPlanPrepCollapsed, setIsMethodPlanPrepCollapsed] = useState(false);
   const [isPlanSetupCollapsed, setIsPlanSetupCollapsed] = useState(false);
-  const [hasConfirmedKoicPush, setHasConfirmedKoicPush] = useState(false);
-  const [publishedMethodPlanRows, setPublishedMethodPlanRows] = useState<MethodPlanRow[]>([]);
+  const [hasConfirmedKoicPush, setHasConfirmedKoicPush] = useState(savedDraft?.hasConfirmedKoicPush ?? false);
+  const [showPrepAfterTask, setShowPrepAfterTask] = useState(false);
+  const [publishedMethodPlanRows, setPublishedMethodPlanRows] = useState<MethodPlanRow[]>(savedDraft?.publishedMethodPlanRows ?? []);
+  const currentDraft: JulyDraft = {
+    attachmentCompletion, language, inventoryPolicyFileName, inventoryQualityFileName, methodFileName,
+    inventoryMatrixRows, methodPlanRows, methodPlanStepFiles, methodPlanStepNotes,
+    entityRiskLevel, entityIndustry, entityIndustrySegment, interimInventoryTotal, yearEndInventoryTotal,
+    stepTwoSelections, inventoryNatureAnswers, isStepTwoConfirmed, hasConfirmedKoicPush, publishedMethodPlanRows,
+  };
+  const [lastSavedSnapshot, setLastSavedSnapshot] = useState(() => savedDraft ? JSON.stringify(savedDraft) : '');
+  const isCurrentDraftSaved = JSON.stringify(currentDraft) === lastSavedSnapshot;
+  const persistDraft = (overrides: Partial<JulyDraft> = {}) => {
+    const draft = { ...currentDraft, ...overrides };
+    try {
+      localStorage.setItem(draftKey, JSON.stringify({ version: 1, data: draft }));
+      setLastSavedSnapshot(JSON.stringify(draft));
+      setInventoryStepsSaved(true);
+      setSaveError('');
+      return true;
+    } catch {
+      setSaveError('保存失败，浏览器存储不可用或空间不足。填写内容仍保留在当前页面，请重试。');
+      return false;
+    }
+  };
   const methodPlanMatrixRef = useRef<MethodPlanMatrixHandle>(null);
   const stepTwoCarouselRef = useRef<HTMLDivElement>(null);
   const stepTwoQuestionCardRef = useRef<HTMLElement>(null);
@@ -1000,6 +1356,7 @@ export default function PreWpJuly({ onBack, taskId }: PreWpJulyProps) {
       id: 1,
       procedure: '根据了解到的被审计单位存货性质信息进行勾选，获悉项目组在设计或执行程序时应考虑的因素',
       ...PRE_WP_JULY_STEP_REFERENCES[2],
+      kaeg: [],
     },
     {
       id: 2,
@@ -1010,43 +1367,52 @@ export default function PreWpJuly({ onBack, taskId }: PreWpJulyProps) {
     {
       id: 3,
       displayNumber: 2,
-      procedure: '如被审计单位使用是外部专家，记录专家的工作流程与政策性文件。',
+      procedure: '考虑项目组就以往的存货盘点实施的审计程序的结果，获取有关被审计单位历史盘点结果的信息，并记录项目组识别和评估到的本期重大错报风险。',
       ...PRE_WP_JULY_STEP_REFERENCES[3],
     },
     {
       id: 4,
       displayNumber: 3,
-      procedure: '如果管理层已经执行了一系列自动化程序来协助盘点，记录程序抓取哪些信息以及该等信息如何传输至被审计单位的存货追踪系统（如通过系统接口）。\n \t并记录项目组是否考虑引入特定项目组成员（如信息技术审计人员）。',
+      procedure: '了解被审计单位关于存货管理的会计政策或原则（包括聘请外部专业机构执行的存货盘点），记录被审计单位的存货盘点计划和方案。\n项目组应考虑外部专业机构是否构成管理层的专家，并在适用的情况下根据对其独立性、客观性专业素养和胜任能力进行的评估，调整亲自测试的范围。',
       ...PRE_WP_JULY_STEP_REFERENCES[4],
     },
     {
       id: 5,
       displayNumber: 4,
-      procedure: '记录被审计单位是如何计量存货数量（包括必要时对天平、测量仪器、计量器等进行校准） 。',
+      procedure: '如果管理层已经执行了一系列自动化程序来协助盘点，记录程序抓取哪些信息以及该等信息如何传输至被审计单位的存货追踪系统，并记录有哪些相关的自动化控制活动（如通过系统接口）。\n记录项目组是否考虑引入特定项目组成员（如信息技术审计人员）。',
       ...PRE_WP_JULY_STEP_REFERENCES[5],
     },
     {
       id: 6,
       displayNumber: 5,
-      procedure: '如果被审计单位对存货数量进行估计，记录其对项目组的存货监盘方法的影响及项目组的应对方式。',
+      procedure: '记录被审计单位是如何计量存货数量（包括必要时对天平、测量仪器、计量器等进行校准）。',
       ...PRE_WP_JULY_STEP_REFERENCES[6],
     },
     {
       id: 7,
       displayNumber: 6,
-      procedure: '了解被审计单位的存货类型和存放地点。获取各存放地点的存货的类型、和已调节至期中总账的存货信息，并记录项目组如何确认监盘范围和样本量及完成样本的分配。',
+      procedure: '如果被审计单位对存货数量进行估计，记录其对项目组的存货监盘方法的影响及项目组的应对方式（如考虑引入专家或利用审计软件工具（SAT））。',
       ...PRE_WP_JULY_STEP_REFERENCES[7],
     },
     {
       id: 8,
       displayNumber: 7,
-      procedure: '如果被审计单位使用抽样方法来选取存货实物进行盘点，则按照“评价被审计单位使用抽样方法的适当性（如适用）进行存货盘点”实施程序。',
+      procedure: '如果被审计单位使用抽样方法来选取存货实物进行盘点，则按照“评价被审计单位使用抽样方法的适当性（如适用）进行存货盘点”实施程序并记录。',
       ...PRE_WP_JULY_STEP_REFERENCES[8],
+    },
+    {
+      id: 9,
+      displayNumber: 8,
+      procedure: '记录项目组在计划阶段，观察到的其他事项',
+      kaeg: [],
+      workflow: [],
     },
 
   ];
 
-  const visibleMethodPlanPrepSteps = steps.filter((step) => [1, 2, 3, 4, 5, 6, 7, 8].includes(step.id));
+  const visibleMethodPlanPrepSteps = steps.filter((step) =>
+    [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].includes(step.id) && (!showOverview || step.id !== 1)
+  );
   const attachmentSteps: AttachItem[] = [
 
     {
@@ -1150,7 +1516,7 @@ export default function PreWpJuly({ onBack, taskId }: PreWpJulyProps) {
       interimInventoryTotal.trim() &&
       yearEndInventoryTotal.trim()
     ) &&
-    isStepTwoComplete &&
+    (showOverview || isStepTwoComplete) &&
     [2, 3, 4, 5, 6, 7, 8].every((stepId) => Boolean(methodPlanStepNotes[stepId]?.trim()));
 
   const scrollToStepTwoCard = (cardIndex: 0 | 1) => {
@@ -1170,14 +1536,14 @@ export default function PreWpJuly({ onBack, taskId }: PreWpJulyProps) {
   };
 
   const handlePageSave = () => {
-    setInventoryStepsSaved(true);
+    if (!persistDraft()) return;
 
     if (isMethodPlanPrepComplete) {
       setIsMethodPlanPrepCollapsed(true);
       return;
     }
 
-    if (isStepTwoConfirmed && isStepTwoComplete) {
+    if (!showOverview && isStepTwoConfirmed && isStepTwoComplete) {
       setIsStepTwoCollapsed(false);
       scrollToStepTwoCard(1);
     }
@@ -1216,7 +1582,7 @@ export default function PreWpJuly({ onBack, taskId }: PreWpJulyProps) {
   };
 
   const handleInventoryMatrixSave = () => {
-    setInventoryStepsSaved(true);
+    if (!persistDraft()) return;
     setMethodPlanRows((currentRows) =>
       syncMethodPlanRowsFromInventoryRows(inventoryMatrixRows, currentRows)
     );
@@ -1239,6 +1605,7 @@ export default function PreWpJuly({ onBack, taskId }: PreWpJulyProps) {
           selectedAsSample: methodRow.selectedAsSample,
           sampleChangeReason: methodRow.sampleChangeReason,
           category: methodRow.importedCategory ?? inventoryRow.category,
+          otherCharacteristics: methodRow.importedOtherCharacteristics ?? inventoryRow.otherCharacteristics,
           endingBalanceConfirmation:
             methodRow.importedEndingBalanceConfirmation ?? inventoryRow.endingBalanceConfirmation,
           systemType: methodRow.importedSystemType ?? inventoryRow.systemType,
@@ -1284,12 +1651,13 @@ export default function PreWpJuly({ onBack, taskId }: PreWpJulyProps) {
   const handleKoicPushConfirm = (publishedRows: MethodPlanRow[]) => {
     const acceptedRows = publishedRows.filter((row) => !getInventoryProcedureDecision(row).blocked);
     if (acceptedRows.length === 0) return;
-    setPublishedMethodPlanRows((current) => {
-      const byId = new Map(current.map((row) => [row.id, row]));
-      acceptedRows.forEach((row) => byId.set(row.id, { ...row }));
-      return Array.from(byId.values());
-    });
+    const byId = new Map(publishedMethodPlanRows.map((row) => [row.id, row]));
+    acceptedRows.forEach((row) => byId.set(row.id, { ...row }));
+    const nextPublishedRows = Array.from(byId.values());
+    setPublishedMethodPlanRows(nextPublishedRows);
+    persistDraft({ publishedMethodPlanRows: nextPublishedRows, hasConfirmedKoicPush: true });
     setHasConfirmedKoicPush(true);
+    setShowPrepAfterTask(false);
     setIsWorkpaperIntroCollapsed(true);
     setIsMethodPlanPrepCollapsed(true);
     setIsPlanSetupCollapsed(true);
@@ -1314,6 +1682,10 @@ export default function PreWpJuly({ onBack, taskId }: PreWpJulyProps) {
   }, []);
 
   useEffect(() => {
+    if (showOverview) {
+      setStepTwoCarouselHeight(null);
+      return;
+    }
     if (activePreWpJulyStage !== 'method') {
       setStepTwoCarouselHeight(null);
       shouldRestoreStepTwoCardPositionRef.current = true;
@@ -1362,7 +1734,7 @@ export default function PreWpJuly({ onBack, taskId }: PreWpJulyProps) {
       window.cancelAnimationFrame(secondFrameId);
       resizeObserver?.disconnect();
     };
-  }, [activePreWpJulyStage, activeStepTwoCard, isStepTwoCollapsed, isStepTwoConfirmed]);
+  }, [activePreWpJulyStage, activeStepTwoCard, isStepTwoCollapsed, isStepTwoConfirmed, showOverview]);
 
   useEffect(() => {
     setAttachmentCompletion((current) => {
@@ -1453,6 +1825,11 @@ export default function PreWpJuly({ onBack, taskId }: PreWpJulyProps) {
   }, []);
 
   const navigateToStage = (stage: PreWpJulyStage) => {
+    if (stage === 'method' && hasConfirmedKoicPush) {
+      setShowPrepAfterTask(true);
+      setIsMethodPlanPrepCollapsed(false);
+      setIsWorkpaperIntroCollapsed(false);
+    }
     setActivePreWpJulyStage(stage);
     const sectionRef =
       stage === 'method'
@@ -1466,51 +1843,21 @@ export default function PreWpJuly({ onBack, taskId }: PreWpJulyProps) {
     });
   };
 
-  return (
-    <div className="flex flex-col gap-8 px-3 sm:px-4 lg:px-8">
-      <div className="mb-4 flex items-start">
-        <div>
-          <h1 className="text-2xl font-bold leading-tight text-gray-900">1325146-Tech Solutions Demo & Training (CN)</h1>
-          {/* <p className="mt-1 text-xs text-gray-500">任务 ID: {taskId} | 任务编码: R000009895379</p> */}
+  const inventoryMatrixSection = (
+      <div ref={inventorySectionRef} className={cn('scroll-mt-24 space-y-4', showOverview ? '' : 'order-2 -mt-4')}>
+        <div className={cn('flex items-center justify-between gap-4', !showOverview && 'ml-4')}>
+          <h2 className={cn('text-lg font-bold', !showOverview && 'border-l-4 border-blue-600 pl-3')}>存货了解矩阵</h2>
         </div>
-      </div>
-
-      <div ref={workpaperHeaderRef} className="h-[58px]">
-        <div className="relative h-full">
-          <div
-            className={cn(
-              'flex items-center justify-between gap-4 pb-3',
-              isWorkpaperHeaderPinned &&
-                'fixed inset-x-0 top-0 z-40 border-b border-white/30 bg-white/30 px-2 py-2 shadow-[0_8px_24px_rgba(15,23,42,0.08)] backdrop-blur-md backdrop-saturate-150 sm:px-4 lg:px-8'
-            )}
-          >
-          <h2 className="shrink-0 border-l-[5px] border-blue-600 pl-4 text-2xl font-bold leading-9">存货工作底稿</h2>
-          <button className="flex items-center rounded bg-blue-600 px-4 py-1.5 text-sm text-white shadow-sm transition hover:bg-blue-700">
-            <Download size={14} className="mr-1.5" /> 导出底稿
-          </button>
-          </div>
-        </div>
-      </div>
-
-      <PreWpJulyCompactStepIndicator
-        currentStage={activePreWpJulyStage}
-        onStageClick={navigateToStage}
-        showSave={showFloatingSaveButton}
-        onSave={handlePageSave}
-        saved={inventoryStepsSaved}
-      />
-
-      {(
-      <div ref={inventorySectionRef} className="order-2 -mt-4 scroll-mt-24 space-y-4">
-        <div className="ml-4 flex items-center justify-between gap-4">
-          <h2 className="border-l-4 border-blue-600 pl-3 text-lg font-bold">存货了解矩阵</h2>
-        </div>
-        <div className="ml-4 overflow-visible rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+        <p className={cn('font-medium leading-6 text-gray-800', !showOverview && 'ml-4')}>
+          获取按类型和/或存放地点划分、并已调节至期中总账的存货分析。完成存货监盘计划矩阵。
+        </p>
+        <div className={cn('overflow-visible', !showOverview && 'ml-4')}>
           <InventoryMatrix
             embedded
             hideNoteLabels
             rows={inventoryMatrixRows}
             onRowsChange={handleInventoryMatrixRowsChange}
+            createdTaskRowIds={publishedMethodPlanRows.map((row) => row.id)}
             onCreateTasks={() => methodPlanMatrixRef.current?.openKoicPushModal()}
             onOpenLocationSettings={(rowId) =>
               methodPlanMatrixRef.current?.openLocationSettings(rowId)
@@ -1532,10 +1879,10 @@ export default function PreWpJuly({ onBack, taskId }: PreWpJulyProps) {
                 type="button"
                 onClick={openInventoryBulkImport}
                 className="inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-[11px] font-medium text-slate-600 transition hover:bg-slate-100 hover:text-[#00338D]"
-                title="下载模板或导入存货数据"
+                title="下载空白模板、当前列表或导入存货数据"
               >
-                <Upload size={12} />
-                模板导入
+                <Upload size={14} aria-hidden="true" />
+                批量导入
               </button>
             }
           />
@@ -1594,11 +1941,100 @@ export default function PreWpJuly({ onBack, taskId }: PreWpJulyProps) {
           </div>
         </div>
       </div>
+  );
+
+  return (
+    <div className={cn('relative -left-4 min-w-0 flex flex-col gap-8', menuOpen ? 'px-0 sm:px-2 lg:px-4' : 'px-3 sm:px-4 lg:px-8')}>
+      {menuOpen && (
+        <aside
+          id="wp-july-menu"
+          ref={menuRef}
+          aria-label="工作底稿导航"
+          className="fixed bottom-0 left-0 top-[60px] z-[58] flex w-[200px] flex-col border-r border-white/50 bg-white/35 p-2.5 shadow-[4px_0_24px_rgba(15,23,42,0.06)] backdrop-blur-md backdrop-saturate-150"
+        >
+          <nav aria-label="左侧步骤导航" className="space-y-2">
+            {JULY_NAV_STAGES.map((stage, index) => (
+              <button
+                key={stage.key}
+                type="button"
+                onClick={() => navigateToStage(stage.key)}
+                aria-current={activePreWpJulyStage === stage.key ? 'step' : undefined}
+                className={cn(
+                  'flex w-full items-start gap-2 rounded-lg px-2 py-3 text-left text-xs leading-5 transition duration-200 motion-reduce:transition-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#00338D]',
+                  activePreWpJulyStage === stage.key
+                    ? 'bg-blue-50/80 font-bold text-[#00338D]'
+                    : 'font-medium text-slate-600 hover:bg-white/70 hover:text-[#00338D]'
+                )}
+              >
+                <span className={cn(
+                  'flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-[10px] transition-colors',
+                  activePreWpJulyStage === stage.key
+                    ? 'border-[#00338D] bg-[#00338D] font-bold text-white shadow-sm'
+                    : 'border-slate-300/60 bg-white/30 text-slate-500'
+                )}>{index + 1}</span>
+                <span className="min-w-0 break-words">{stage.label}</span>
+              </button>
+            ))}
+          </nav>
+          <div className="mt-auto flex items-center justify-end gap-2 pt-4">
+            <button
+              type="button"
+              aria-label="收起工作底稿导航"
+              onClick={() => {
+                onMenuClose?.();
+                document.getElementById('wp-july-menu-button')?.focus({ preventScroll: true });
+              }}
+              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-slate-500 hover:bg-white/70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#00338D]"
+            ><X size={16} /></button>
+          </div>
+        </aside>
       )}
+      <div className="-mb-4 flex items-start">
+        <div>
+          <h1 className="text-2xl font-bold leading-tight text-gray-900">1325146-Tech Solutions Demo & Training (CN)</h1>
+          {/* <p className="mt-1 text-xs text-gray-500">任务 ID: {taskId} | 任务编码: R000009895379</p> */}
+        </div>
+      </div>
+
+      <div ref={workpaperHeaderRef} className="h-[58px]">
+        <div className="relative h-full">
+          <div
+            className={cn(
+              'flex flex-wrap items-center justify-between gap-4 pb-3 transition-[left] duration-300 motion-reduce:transition-none',
+              isWorkpaperHeaderPinned &&
+                'fixed inset-x-0 top-0 z-40 border-b border-white/30 bg-white/30 px-2 py-2 shadow-[0_8px_24px_rgba(15,23,42,0.08)] backdrop-blur-md backdrop-saturate-150 sm:px-4 lg:px-8'
+            )}
+          >
+          <h2 className="shrink-0 border-l-[5px] border-blue-600 pl-4 text-2xl font-bold leading-9">存货工作底稿</h2>
+          <div className="ml-auto flex shrink-0 items-center gap-2">
+          {saveError && <span role="alert" className="max-w-sm text-xs text-red-600">{saveError}</span>}
+          {showOverview && (
+            <button type="button" onClick={handlePageSave} className="flex items-center gap-1.5 rounded border border-slate-300/70 bg-white/65 px-4 py-1.5 text-sm font-medium text-[#54709e] shadow-sm transition hover:bg-white/90">
+              <Save size={14} />{isCurrentDraftSaved ? '已保存' : '保存'}
+            </button>
+          )}
+          <button className="flex items-center rounded border border-[#00338D] bg-[#00338D] px-4 py-1.5 text-sm text-white shadow-sm transition hover:bg-[#002b75]">
+            <Download size={14} className="mr-1.5" /> 导出底稿
+          </button>
+          </div>
+          </div>
+        </div>
+      </div>
+
+      {showCompactNavigation && <PreWpJulyCompactStepIndicator
+        currentStage={activePreWpJulyStage}
+        onStageClick={navigateToStage}
+        showSave={showFloatingSaveButton}
+        onSave={handlePageSave}
+        saved={isCurrentDraftSaved}
+      />}
+
+      {(!showOverview || (hasConfirmedKoicPush && !showPrepAfterTask)) && inventoryMatrixSection}
 
       {(
       <>
-      <div className="order-1 -mt-3 ml-4 flex items-center justify-between gap-4">
+      {(!hasConfirmedKoicPush || showPrepAfterTask) && (<>
+      <div className={cn('order-1 ml-4 flex items-center justify-between gap-4', showOverview ? '-mt-8' : '-mt-3')}>
         <div className="relative">
           <button
             type="button"
@@ -1632,31 +2068,47 @@ export default function PreWpJuly({ onBack, taskId }: PreWpJulyProps) {
           </div>
         </div>
       )}
+      </>)}
+      {(!hasConfirmedKoicPush || showPrepAfterTask) && (
       <div
         ref={methodPlanProgramSectionRef}
         className="relative order-1 -mt-4 scroll-mt-24 space-y-4"
       >
-        <button
-          type="button"
-          onClick={() => setIsMethodPlanPrepCollapsed((current) => !current)}
-          className="absolute right-0 top-0 z-10 -translate-y-[calc(20%+1px)] inline-flex items-center gap-1 rounded border border-gray-200 bg-white px-3 py-1 text-[11px] font-medium text-gray-500 shadow-sm transition hover:border-blue-300 hover:text-blue-700"
-          aria-expanded={!isMethodPlanPrepCollapsed}
-        >
-          {isMethodPlanPrepCollapsed ? <ChevronDown size={12} /> : <ChevronUp size={12} />}
-          {isMethodPlanPrepCollapsed ? '展开' : '收起'}
-        </button>
-        {!isMethodPlanPrepCollapsed && (
-        <div className="ml-4 overflow-hidden rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+        <div>
+          {isMethodPlanPrepCollapsed && (
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={() => setIsMethodPlanPrepCollapsed(false)}
+                className="inline-flex items-center gap-1 rounded border border-gray-200 bg-white px-3 py-1 text-[11px] font-medium text-gray-500 shadow-sm transition hover:border-blue-300 hover:text-blue-700"
+                aria-expanded={false}
+              >
+                <ChevronDown size={12} /> 展开
+              </button>
+            </div>
+          )}
+          {!isMethodPlanPrepCollapsed && (
           <div className="overflow-visible rounded-lg border border-gray-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
             <TableFullscreenFrame
               title="了解被审计单位的存货"
+              headerActions={
+                <button
+                  type="button"
+                  onClick={() => setIsMethodPlanPrepCollapsed(true)}
+                  className="inline-flex items-center gap-1 rounded border border-gray-200 bg-white px-3 py-1 text-[11px] font-medium text-gray-500 shadow-sm transition hover:border-blue-300 hover:text-blue-700"
+                  aria-expanded={true}
+                >
+                  <ChevronUp size={12} /> 收起
+                </button>
+              }
             >
             <div className="overflow-x-auto rounded-lg">
-              <table className="w-full border-collapse text-left">
+              <table className="w-full table-fixed border-collapse text-left">
+                <colgroup><col style={{ width: 48 }} /><col /></colgroup>
                 <thead>
-                  <tr className="bg-gray-100 text-xs tracking-wider text-gray-600">
-                    <th className="w-24 border-b border-gray-200 px-4 py-2 font-medium">状态</th>
-                    <th className="min-w-[720px] border-b border-gray-200 px-4 py-2 font-medium">
+                  <tr className="bg-gray-100 text-sm tracking-wider text-gray-600">
+                    <th className="w-12 min-w-12 border-b border-gray-200 px-1.5 py-2 text-center font-medium">状态</th>
+                    <th className="border-b border-gray-200 px-3 py-2 font-medium">
                       <span>程序</span>
                       <span className="ml-3 inline-flex items-center gap-1.5 text-[10px] font-normal tracking-normal text-gray-400">
                         <span className="font-medium">KAEG</span>
@@ -1667,7 +2119,7 @@ export default function PreWpJuly({ onBack, taskId }: PreWpJulyProps) {
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   <tr className="bg-slate-50/40">
-                    <td className="px-4 py-4 align-top">
+                    <td className="px-2 py-4 align-top">
                       <div className="flex justify-center pt-1.5">
                         <div
                           className="h-2.5 w-2.5 rounded-full"
@@ -1680,18 +2132,18 @@ export default function PreWpJuly({ onBack, taskId }: PreWpJulyProps) {
                         />
                       </div>
                     </td>
-                    <td className="px-4 py-4 align-top">
+                    <td className="px-3 py-4 align-top">
                       <div className="mb-3 text-sm font-semibold text-gray-800">
                         记录被审计单位的基本信息及相关存货金额
                       </div>
-                      <div className="grid grid-cols-2 gap-x-6 gap-y-2.5 text-xs">
-                        <div className="col-span-2 grid grid-cols-3 gap-4">
-                          <label className="grid min-w-0 grid-cols-[84px_minmax(0,1fr)] items-center gap-2">
+                      <div className="w-full overflow-x-auto">
+                        <div className="grid min-w-[1050px] grid-cols-5 gap-3 text-xs">
+                          <label className="flex min-w-0 flex-col gap-1.5">
                             <span className="whitespace-nowrap text-gray-600">存货风险等级</span>
                             <select
                               value={entityRiskLevel}
                               onChange={(event) => setEntityRiskLevel(event.target.value)}
-                              className="h-8 min-w-0 rounded border border-gray-200 bg-white px-2 text-xs text-gray-700 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                              className="h-8 w-1/2 rounded border border-gray-200 bg-white px-2 text-xs text-gray-700 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                               aria-label="选择被审计单位存货的风险等级"
                             >
                               <option value="">请选择</option>
@@ -1700,12 +2152,12 @@ export default function PreWpJuly({ onBack, taskId }: PreWpJulyProps) {
                               <option value="低">低</option>
                             </select>
                           </label>
-                          <label className="grid min-w-0 grid-cols-[56px_minmax(0,1fr)] items-center gap-2">
+                          <label className="flex min-w-0 flex-col gap-1.5">
                             <span className="whitespace-nowrap text-gray-600">所属行业</span>
                             <select
                               value={entityIndustry}
                               onChange={(event) => setEntityIndustry(event.target.value)}
-                              className="h-8 min-w-0 rounded border border-gray-200 bg-white px-2 text-xs text-gray-700 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                              className="h-8 w-1/2 rounded border border-gray-200 bg-white px-2 text-xs text-gray-700 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                               aria-label="选择被审计单位所属行业"
                             >
                               <option value="">请选择</option>
@@ -1714,19 +2166,18 @@ export default function PreWpJuly({ onBack, taskId }: PreWpJulyProps) {
                               ))}
                             </select>
                           </label>
-                          <label className="grid min-w-0 grid-cols-[56px_minmax(0,1fr)] items-center gap-2">
+                          <label className="flex min-w-0 flex-col gap-1.5">
                             <span className="whitespace-nowrap text-gray-600">行业细分</span>
                             <input
                               type="text"
                               value={entityIndustrySegment}
                               onChange={(event) => setEntityIndustrySegment(event.target.value)}
-                              className="h-8 min-w-0 rounded border border-gray-200 bg-white px-2 text-xs text-gray-700 outline-none placeholder:text-gray-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                              className="h-8 w-1/2 rounded border border-gray-200 bg-white px-2 text-xs text-gray-700 outline-none placeholder:text-gray-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                               placeholder="请输入"
                               aria-label="填写被审计单位行业细分"
                             />
                           </label>
-                        </div>
-                        <label className="grid grid-cols-[150px_minmax(0,1fr)] items-center gap-2">
+                        <label className="flex min-w-0 flex-col gap-1.5">
                           <span className="text-gray-600">本期预审阶段存货总额</span>
                           <input
                             type="text"
@@ -1736,7 +2187,7 @@ export default function PreWpJuly({ onBack, taskId }: PreWpJulyProps) {
                             placeholder="请输入金额"
                           />
                         </label>
-                        <label className="grid grid-cols-[120px_minmax(0,1fr)] items-center gap-2">
+                        <label className="flex min-w-0 flex-col gap-1.5">
                           <span className="text-gray-600">本期期末存货总额</span>
                           <input
                             type="text"
@@ -1746,6 +2197,7 @@ export default function PreWpJuly({ onBack, taskId }: PreWpJulyProps) {
                             placeholder="请输入金额"
                           />
                         </label>
+                        </div>
                       </div>
                     </td>
                   </tr>
@@ -1753,17 +2205,17 @@ export default function PreWpJuly({ onBack, taskId }: PreWpJulyProps) {
                     return (
                       <React.Fragment key={`method-plan-prep-${step.id}`}>
                         <tr className="transition-colors hover:bg-gray-50">
-                          <td className="px-4 pb-2 pt-6 align-top">
+                          <td className="px-2 pb-2 pt-6 align-top">
                             <div className="flex items-start justify-center">
-                              <div
+                              {(!showOverview || step.id !== 1) && <div
                                 className="mt-1.5 h-2.5 w-2.5 rounded-full transition-colors"
                                 style={{ backgroundColor: hasStepInputContent(step.id) ? '#0D92F8' : '#D1D5DB' }}
-                              />
+                              />}
                             </div>
                           </td>
-                          <td className="px-4 pb-2 pt-6 align-top">
+                          <td className="px-3 pb-2 pt-6 align-top">
                             <StepProcedureCell step={step}>
-                              {step.id === 1 && isStepTwoConfirmed && (
+                              {step.id === 1 && !showOverview && isStepTwoConfirmed && (
                                 <button
                                   type="button"
                                   onClick={() => {
@@ -1781,7 +2233,7 @@ export default function PreWpJuly({ onBack, taskId }: PreWpJulyProps) {
                                   {isStepTwoCollapsed ? '展开审计指引' : '收起审计指引'}
                                 </button>
                               )}
-                              {[3, 4, 7, 8].includes(step.id) && (
+                              {[3, 4, 7, 8, 9, 10].includes(step.id) && (
                                 <div>
                                   <label
                                     className="inline-flex cursor-pointer items-center gap-2 text-xs font-medium text-gray-600 transition hover:text-gray-900"
@@ -1813,10 +2265,10 @@ export default function PreWpJuly({ onBack, taskId }: PreWpJulyProps) {
                             </StepProcedureCell>
                           </td>
                         </tr>
-                        {step.id === 1 && !isStepTwoCollapsed && (
+                        {step.id === 1 && !showOverview && !isStepTwoCollapsed && (
                           <tr className="bg-white">
-                            <td className="px-4 pb-6 align-top" />
-                            <td className="px-4 pb-6 align-top">
+                            <td className="px-2 pb-6 align-top" />
+                            <td className="px-3 pb-6 align-top">
                               <div className="relative">
                               <div
                                 ref={stepTwoCarouselRef}
@@ -1837,7 +2289,7 @@ export default function PreWpJuly({ onBack, taskId }: PreWpJulyProps) {
                                   aria-label="存货性质问卷卡片一"
                                 >
                                   <ol
-                                    className="space-y-6 rounded-md border border-gray-200 bg-gray-50/60 px-4 py-4"
+                                    className="space-y-6 rounded-md border border-gray-200 bg-gray-50/60 pl-8 pr-4 py-4"
                                     aria-label="存货性质问卷的分题"
                                   >
                                     {PRE_WP_JULY_STEP_TWO_SUBQUESTIONS.map((subquestion) => {
@@ -1847,11 +2299,11 @@ export default function PreWpJuly({ onBack, taskId }: PreWpJulyProps) {
 
                                   return (
                                     <li key={subquestion.id} className="text-sm leading-6 text-gray-700">
-                                      <div className="grid w-[70%] min-w-[700px] max-w-full grid-cols-[auto_minmax(0,1fr)] items-start gap-x-2 gap-y-2">
-                                        <span className="shrink-0 font-semibold text-[#00338D]">{subquestionNumber}</span>
+                                      <div className="relative grid w-[70%] min-w-[700px] max-w-full grid-cols-[minmax(0,1fr)] items-start gap-y-2">
+                                        <span className="absolute -left-6 top-0 w-5 text-right font-semibold text-[#00338D]">{subquestionNumber}.<sup className="absolute -right-1 top-0 text-[10px] leading-none text-red-500" aria-hidden="true">*</sup><span className="sr-only">（必填）</span></span>
                                         <span>{subquestion.text}</span>
                                         {isSingleChoice && (
-                                          <div className="col-start-2 row-start-2 mt-1 min-w-0">
+                                          <div className="row-start-2 mt-1 min-w-0">
                                             <ConnectedOptionGroup
                                               ariaLabel={`${subquestion.id} ${subquestion.text}`}
                                               options={subquestion.options}
@@ -1864,7 +2316,7 @@ export default function PreWpJuly({ onBack, taskId }: PreWpJulyProps) {
                                         )}
                                         {hasOptions && !isSingleChoice && (
                                           <>
-                                            <div className="col-start-2 row-start-2 mt-1 min-w-0">
+                                            <div className="row-start-2 mt-1 min-w-0">
                                               <ConnectedOptionGroup
                                                 ariaLabel={`${subquestion.id} ${subquestion.text}`}
                                                 options={subquestion.options}
@@ -1961,10 +2413,10 @@ export default function PreWpJuly({ onBack, taskId }: PreWpJulyProps) {
                             </td>
                           </tr>
                         )}
-                        {[2, 3, 4, 5, 6, 7, 8].includes(step.id) && (
+                        {[2, 3, 4, 5, 6, 7, 8, 9, 10].includes(step.id) && (
                           <tr className="bg-white">
-                            <td className="px-4 pb-6 align-top" />
-                            <td className="px-4 pb-6 align-top">
+                            <td className="px-2 pb-6 align-top" />
+                            <td className="px-3 pb-6 align-top">
                               {/* <label
                                 className="mb-1 block text-[11px] font-medium leading-4 text-gray-400"
                                 htmlFor={`method-plan-step-note-${step.id}`}
@@ -1981,11 +2433,33 @@ export default function PreWpJuly({ onBack, taskId }: PreWpJulyProps) {
                                     [step.id]: event.target.value,
                                   }))
                                 }
-                                aria-label={`问题 ${step.id} 文件说明`}
+                                aria-label={`问题 ${step.displayNumber ?? step.id} 文件说明`}
                                 className={cn(
-                                  'min-h-[64px] w-full resize-y rounded border border-gray-200 bg-white px-3 py-2 text-sm font-normal leading-5 text-gray-700 placeholder:text-gray-400 outline-none transition focus:border-blue-500 focus:ring-1 focus:ring-blue-500'
+                                  'min-h-[64px] w-full resize-y rounded border border-gray-200 bg-white px-3 py-2 text-sm font-normal leading-5 text-gray-700 placeholder:text-gray-400 outline-none transition focus:border-blue-500 focus:ring-1 focus:ring-blue-500 lg:w-[80%]'
                                 )}
                               />
+                            </td>
+                          </tr>
+                        )}
+                        {showOverview && step.id === 3 && (
+                          <tr className="bg-white" style={{ borderTopWidth: 0 }}>
+                            <td className="px-2 pb-6 align-top" />
+                            <td className="px-3 pb-6 align-top">
+                              <h3 className={cn('mb-5 pt-5', INVENTORY_CONSIDERATION_HEADING_CLASS_NAME)}>
+                                根据了解到的被审计单位存货盘点信息，获悉项目组在设计或执行程序时应考虑的因素
+                              </h3>
+                              <InventoryNatureQuestions group="before-policy" answers={inventoryNatureAnswers} setAnswers={setInventoryNatureAnswers} />
+                            </td>
+                          </tr>
+                        )}
+                        {showOverview && step.id === 2 && (
+                          <tr className="bg-white" style={{ borderTopWidth: 0 }}>
+                            <td className="px-2 pb-6 align-top" />
+                            <td className="px-3 pb-6 align-top">
+                              <div className="space-y-6">
+                                {inventoryMatrixSection}
+                                <StepProcedureCell step={steps[0]} showInventoryNatureQuestions inventoryNatureAnswers={inventoryNatureAnswers} setInventoryNatureAnswers={setInventoryNatureAnswers} />
+                              </div>
                             </td>
                           </tr>
                         )}
@@ -2041,24 +2515,32 @@ export default function PreWpJuly({ onBack, taskId }: PreWpJulyProps) {
             </div>
             </TableFullscreenFrame>
           </div>
+          )}
 
-          {methodFileName && (
+          {!isMethodPlanPrepCollapsed && methodFileName && (
             <p className="mt-3 text-xs text-gray-500">已上传文件: {methodFileName}</p>
           )}
-          <MethodPlanMatrix
-            ref={methodPlanMatrixRef}
-            rows={methodPlanRows}
-            onRowsChange={handleMethodPlanRowsChange}
-            onBulkImportRows={handleMethodPlanBulkImport}
-            showBulkImportButton={false}
-            renderTableContent={false}
-            bulkImportMode="locations"
-            onKoicPushConfirm={handleKoicPushConfirm}
-            hideNoteLabels
-          />
         </div>
-        )}
       </div>
+      )}
+      <MethodPlanMatrix
+        ref={methodPlanMatrixRef}
+        rows={methodPlanRows}
+        locationExportRows={inventoryMatrixRows.filter(hasInventoryImportContent).map((row) => ({
+          ...buildMethodPlanRowFromInventoryRow(row),
+          auditApproach: row.auditApproach,
+          confirmThirdPartyInventory: row.confirmThirdPartyInventory,
+          importedPlannedAttendancePrimary: row.plannedAttendancePrimary,
+          importedPlannedAttendanceSecondary: row.plannedAttendanceSecondary,
+        }))}
+        onRowsChange={handleMethodPlanRowsChange}
+        onBulkImportRows={handleMethodPlanBulkImport}
+        showBulkImportButton={false}
+        renderTableContent={false}
+        bulkImportMode="locations"
+        onKoicPushConfirm={handleKoicPushConfirm}
+        hideNoteLabels
+      />
 
       <div ref={planSectionRef} className="order-3 ml-4 scroll-mt-24">
         {/* 确定项目组的存货监盘方法 header intentionally hidden. */}
@@ -2069,9 +2551,9 @@ export default function PreWpJuly({ onBack, taskId }: PreWpJulyProps) {
         <div className="ml-4 flex flex-wrap items-center justify-between gap-3 border-l-4 border-blue-600 pl-3">
           <div className="flex flex-wrap items-center gap-5">
           <h2 className="text-lg font-bold">项目组选定的存货监盘方法</h2>
-          <h3 className="text-sm text-blue-400">
+          {/* <h3 className="text-sm text-blue-400">
             *开启毕马威打卡星存货盘点模块前，须完成本页面中所有程序步骤。
-          </h3>
+          </h3> */}
           </div>
         </div>
 
@@ -2130,7 +2612,7 @@ export default function PreWpJuly({ onBack, taskId }: PreWpJulyProps) {
                             href="#"
                             aria-label={`Open link for attachment ${item.id}`}
                             title="Open link"
-                            className="inline-flex items-center text-base leading-none text-[#3C85D3] transition hover:text-blue-800 hover:underline"
+                            className="inline-flex items-center text-base leading-none text-[#3C85D3] no-underline transition hover:text-blue-800"
                           >
                             <LoginOutlined />
                           </a>

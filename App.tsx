@@ -41,6 +41,8 @@ const App: React.FC = () => {
   const [previousView, setPreviousView] = useState<AppView>('workflow');
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [julyVariant, setJulyVariant] = useState<'A' | 'B'>('A');
+  const [isJulyMenuOpen, setIsJulyMenuOpen] = useState(false);
   const [hasClickedLocationAction, setHasClickedLocationAction] = useState(false);
   const [showUploadHint, setShowUploadHint] = useState(false);
   const [templateReviewInfo, setTemplateReviewInfo] = useState<TemplateReviewInfo>(null);
@@ -129,6 +131,7 @@ const App: React.FC = () => {
   }, []);
 
   const handleMouseMove = (e: MouseEvent) => {
+    if (currentView === 'wpForJuly' && julyVariant === 'A' && isJulyMenuOpen) return;
     // Open when mouse is at the very left edge
     if (e.clientX < 15 && !isSidebarOpen) {
       setIsSidebarOpen(true);
@@ -144,7 +147,11 @@ const App: React.FC = () => {
     return () => {
       document.removeEventListener('mousemove', handleMouseMove);
     };
-  }, [isSidebarOpen]);
+  }, [isSidebarOpen, currentView, julyVariant, isJulyMenuOpen]);
+
+  useEffect(() => {
+    setIsJulyMenuOpen(currentView === 'wpForJuly' && julyVariant === 'A');
+  }, [currentView, julyVariant]);
 
   const renderMainContent = () => {
     if (currentView === 'indieMatrix') {
@@ -180,8 +187,13 @@ const App: React.FC = () => {
     if (currentView === 'wpForJuly') {
       return (
         <PreWpJuly
+          key={selectedTaskId || 'wp-for-july-default'}
           taskId={selectedTaskId || ''}
           onBack={() => setCurrentView('projectTaskManagement')}
+          menuOpen={julyVariant === 'A' && isJulyMenuOpen}
+          showCompactNavigation={julyVariant === 'B'}
+          showOverview={julyVariant === 'A'}
+          onMenuClose={() => setIsJulyMenuOpen(false)}
         />
       );
     }
@@ -272,6 +284,7 @@ const App: React.FC = () => {
     currentView === 'preWp' || currentView === 'wpForJuly' || currentView === 'taskDetail' || currentView === 'indieMatrix' || isShitUiView;
   const isFullWidthView = currentView === 'indieMatrix' || isShitUiView;
   const isWideContentView = currentView === 'preWpOnline' || currentView === 'wpForJuly';
+  const showJulySidebar = currentView === 'wpForJuly' && julyVariant === 'A' && isJulyMenuOpen;
   const showShellHeader = !isShitUiView;
   const showShellFooter = !isShitUiView;
   const sidebarTopOffset = showShellHeader ? HEADER_HEIGHT : 0;
@@ -280,7 +293,18 @@ const App: React.FC = () => {
     <div className="min-h-screen flex flex-col relative bg-[#f5f7fa]">
       {showShellHeader && (
         <div className="z-[60] relative">
-          <Header />
+          <Header
+            julyVariant={currentView === 'wpForJuly' ? julyVariant : undefined}
+            julyMenuOpen={isJulyMenuOpen}
+            onJulyMenuToggle={() => {
+              setIsSidebarOpen(false);
+              setIsJulyMenuOpen((open) => !open);
+            }}
+            onJulyVariantChange={(variant) => {
+              setJulyVariant(variant);
+              setIsJulyMenuOpen(false);
+            }}
+          />
         </div>
       )}
 
@@ -325,8 +349,9 @@ const App: React.FC = () => {
         expandedWidth={SIDEBAR_EXPANDED_WIDTH}
       />
 
+      <div className="min-w-0 flex-1 transition-[padding] duration-300 ease-in-out motion-reduce:transition-none" style={{ paddingLeft: showJulySidebar ? 200 : 0 }}>
       <main
-        className={`flex-1 ${isShitUiView ? 'p-0' : 'p-6'} ${isFullWidthView ? 'max-w-none' : isWideContentView ? 'max-w-[1680px] mx-auto' : 'max-w-[1400px] mx-auto'} w-full transition-all duration-300 ease-in-out ${isSidebarOpen ? 'pl-[130px]' : isShitUiView ? 'pl-0' : 'pl-6'}`}
+        className={`min-w-0 ${isShitUiView ? 'p-0' : 'p-6'} ${isFullWidthView ? 'max-w-none' : currentView === 'wpForJuly' ? 'max-w-[1848px] mx-auto' : isWideContentView ? 'max-w-[1680px] mx-auto' : 'max-w-[1400px] mx-auto'} w-full transition-all duration-300 ease-in-out ${isSidebarOpen ? 'pl-[130px]' : isShitUiView ? 'pl-0' : 'pl-6'}`}
       >
         {!isStandaloneView && (
           <div className="mb-6">
@@ -355,8 +380,9 @@ const App: React.FC = () => {
           {renderMainContent()}
         </div>
       </main>
+      </div>
 
-      {showShellFooter && <footer className="p-4 text-[10px] text-gray-400 border-t bg-gray-50 mt-auto">
+      {showShellFooter && <footer style={{ paddingLeft: showJulySidebar ? 216 : undefined }} className="p-4 text-[10px] text-gray-400 border-t bg-gray-50 mt-auto transition-[padding] duration-300 motion-reduce:transition-none">
         <div className="max-w-[1400px] mx-auto">
           <p>KPMG On-site Information Collector (KOIC) v1.3.1, released in Nov 2025.</p>
           <p className="mt-1">© 2025 KPMG Huazhen LLP, a People's Republic of China partnership and a member firm of the KPMG network of independent member firms affiliated with KPMG International Limited ("KPMG International"), a UK entity. All rights reserved.</p>

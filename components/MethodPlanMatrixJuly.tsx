@@ -26,6 +26,7 @@ export type MethodPlanRow = {
   district: string;
   address: string;
   importedCategory?: string;
+  importedOtherCharacteristics?: string;
   importedEndingBalanceConfirmation?: string;
   importedSystemType?: string;
   importedThirdPartyStorage?: string;
@@ -35,6 +36,8 @@ export type MethodPlanRow = {
   importedFinalBalance?: string;
   importedPriorInterimPlannedBalance?: string;
   importedInterimPlannedBalance?: string;
+  importedPlannedAttendancePrimary?: string;
+  importedPlannedAttendanceSecondary?: string;
   countMethod: string;
   selectedAsSample: string;
   sampleQuantity: string;
@@ -51,6 +54,7 @@ export type MethodPlanRow = {
 
 type MethodPlanMatrixProps = {
   rows?: MethodPlanRow[];
+  locationExportRows?: MethodPlanRow[];
   onRowsChange?: (rows: MethodPlanRow[]) => void;
   onBulkImportRows?: (rows: MethodPlanRow[]) => void;
   showBulkImportButton?: boolean;
@@ -87,7 +91,7 @@ const AUDIT_APPROACH_EXPLANATIONS: Partial<Record<string, string>> = {
     '同时获取有关盘点记录完整性和准确性的审计证据，及有关盘点指令和程序是否得到适当设计和执行的审计证据',
 };
 const MONITOR_MODE_OPTIONS = [SELECT_PLACEHOLDER, '现场监盘', '远程监盘', '不适用'];
-const YES_NO_OPTIONS = ['是', '否'];
+const YES_NO_OPTIONS = ['', '是', '否'];
 const BULK_IMPORT_VISIBLE_ROW_COUNT = 6;
 const METHOD_PLAN_PAGE_SIZE = 15;
 const METHOD_PLAN_WEB_AMOUNT_SCALE = 0.000001;
@@ -158,6 +162,7 @@ const BULK_IMPORT_HEADER_ITEMS = [
   { id: 'companyName', label: '所属公司名称', fixed: false },
   { id: 'intervieweeName', label: '受访单位名称', fixed: false },
   { id: 'category', label: '类别', fixed: false },
+  { id: 'otherCharacteristics', label: '存货其他特征', fixed: false },
   { id: 'endingBalanceConfirmation', label: '被审计单位是如何确认期末存货余额的？', fixed: false },
   { id: 'systemType', label: '被审计单位是否使用永续盘存系统或定期盘存系统？', fixed: false },
   { id: 'thirdPartyStorage', label: '是否存放在第三方地点', fixed: false },
@@ -169,22 +174,18 @@ const BULK_IMPORT_HEADER_ITEMS = [
   { id: 'priorInterimPlannedBalance', label: '上期预审阶段计划余额', fixed: false },
   { id: 'interimPlannedBalance', label: '预审阶段计划余额', fixed: false },
   { id: 'finalBalance', label: '期末余额', fixed: false },
+  { id: 'plannedAttendancePrimary', label: '项目组是否可以前往存货所在地点实施监盘', fixed: false },
+  { id: 'plannedAttendanceSecondary', label: '项目组前往存货所在地当日，客户是否开展盘点', fixed: false },
+  { id: 'auditApproach', label: '毕马威就监盘而计划的审计方案', fixed: false },
+  { id: 'sampleQuantity', label: '抽盘数量', fixed: false },
+  { id: 'confirmThirdPartyInventory', label: '是否向存放在第三方地点的存货发出函证', fixed: false },
+  { id: 'monitorMode', label: '现场监盘 vs 远程监盘', fixed: false },
+  { id: 'useExperts', label: '项目组是否计划引入专家和/或特定项目组成员，包括信息技术审计人员？', fixed: false },
+  { id: 'useInternalAudit', label: '项目组是否计划利用内部审计工作获取审计证据？', fixed: false },
+  { id: 'sampleChangeReason', label: '样本变更原因', fixed: false },
 ] as const;
 
 const LOCKED_LOCATION_BULK_IMPORT_HEADER_IDS = ['companyName', 'intervieweeName'] as const;
-const LOCATION_BULK_IMPORT_REQUIRED_HEADER_IDS = [
-  'companyName',
-  'intervieweeName',
-  'category',
-  'endingBalanceConfirmation',
-  'systemType',
-  'thirdPartyStorage',
-  'inventoryCountPlan',
-  'countMethod',
-  'useExpert',
-  'selectedAsSample',
-] as const;
-
 const METHOD_PLAN_IMPORT_HEADER_ITEMS = [
   { id: 'index', label: '#', fixed: true },
   { id: 'companyName', label: '所属公司名称', fixed: true },
@@ -193,7 +194,7 @@ const METHOD_PLAN_IMPORT_HEADER_ITEMS = [
   { id: 'city', label: '地点所在市', fixed: true },
   { id: 'district', label: '地点所在区', fixed: true },
   { id: 'address', label: '地点详细地址', fixed: true },
-  { id: 'sampleQuantity', label: '样本数量', fixed: true },
+  { id: 'sampleQuantity', label: '抽盘数量', fixed: true },
   { id: 'confirmThirdPartyInventory', label: '向第三方函证存货的数量和状况', fixed: true },
   { id: 'auditApproach', label: '毕马威就监盘而计划的审计方案', fixed: true },
   { id: 'monitorMode', label: '现场监盘 vs 远程监盘', fixed: true },
@@ -317,16 +318,16 @@ export const createMethodPlanRow = (overrides: Partial<MethodPlanRow> = {}): Met
   district: '',
   address: '',
   countMethod: SELECT_PLACEHOLDER,
-  selectedAsSample: '是',
+  selectedAsSample: '',
   sampleQuantity: '',
-  confirmThirdPartyInventory: '否',
+  confirmThirdPartyInventory: '',
   auditApproach: SELECT_PLACEHOLDER,
   feasibility: SELECT_PLACEHOLDER,
   monitorMode: SELECT_PLACEHOLDER,
   plannedDate: '',
   submissionDate: '',
-  useExperts: '否',
-  useInternalAudit: '否',
+  useExperts: '',
+  useInternalAudit: '',
   sampleChangeReason: '',
   ...overrides,
 });
@@ -351,13 +352,36 @@ type BulkImportHeaderItem =
 type BulkImportHeaderId = LocationBulkImportHeaderId | MethodPlanImportHeaderId;
 type BulkImportParsedRow = Partial<Record<string, string>>;
 
-const normalizeBulkImportHeaderLabel = (value: string) => value.replace(/\s+/g, '');
+const normalizeBulkImportHeaderLabel = (value: string) => value
+  .replace(/（百万元）|\(百万元\)/g, '')
+  .replace(/[\s？?：:，,、/／\-–—（）()]/g, '');
 const BULK_IMPORT_HEADER_ALIASES: Record<string, BulkImportHeaderId> = {
   [normalizeBulkImportHeaderLabel('上期预审阶段余额')]: 'priorInterimPlannedBalance',
+  [normalizeBulkImportHeaderLabel('本期预审阶段余额')]: 'interimPlannedBalance',
+  [normalizeBulkImportHeaderLabel('样本数量')]: 'sampleQuantity',
+  [normalizeBulkImportHeaderLabel('被审计单位的存货盘存系统')]: 'systemType',
+  [normalizeBulkImportHeaderLabel('被审计单位的存货盘点方案')]: 'countMethod',
+  [normalizeBulkImportHeaderLabel('存放在第三方地点？')]: 'thirdPartyStorage',
+  [normalizeBulkImportHeaderLabel('被审计单位是否使用专家')]: 'useExpert',
+  [normalizeBulkImportHeaderLabel('项目组前往当日客户是否开展盘点')]: 'plannedAttendanceSecondary',
+  [normalizeBulkImportHeaderLabel('项目组就监盘而计划的审计方案')]: 'auditApproach',
+  [normalizeBulkImportHeaderLabel('发出函证')]: 'confirmThirdPartyInventory',
+  [normalizeBulkImportHeaderLabel('利用内审获取审计证据')]: 'useInternalAudit',
   [normalizeBulkImportHeaderLabel('受访单位名称')]: 'intervieweeName',
   [normalizeBulkImportHeaderLabel('受访单位')]: 'intervieweeName',
   [normalizeBulkImportHeaderLabel('被访单位名称')]: 'intervieweeName',
   [normalizeBulkImportHeaderLabel('被访单位')]: 'intervieweeName',
+  [normalizeBulkImportHeaderLabel('地点-所属公司名称')]: 'companyName',
+  [normalizeBulkImportHeaderLabel('地点-受访单位名称')]: 'intervieweeName',
+  [normalizeBulkImportHeaderLabel('存货类别')]: 'category',
+  [normalizeBulkImportHeaderLabel('本期期末余额')]: 'finalBalance',
+  [normalizeBulkImportHeaderLabel('本期预审余额')]: 'interimPlannedBalance',
+  [normalizeBulkImportHeaderLabel('被审计单位如何确认期末存货余额')]: 'endingBalanceConfirmation',
+  [normalizeBulkImportHeaderLabel('被审计单位如何计划具体存货盘点')]: 'inventoryCountPlan',
+  [normalizeBulkImportHeaderLabel('是否存放在第三方地点？')]: 'thirdPartyStorage',
+  [normalizeBulkImportHeaderLabel('选为盘点对象')]: 'selectedAsSample',
+  [normalizeBulkImportHeaderLabel('是否向存放在第三方地点的存货发出函证')]: 'confirmThirdPartyInventory',
+  [normalizeBulkImportHeaderLabel('被项目组是否计划利用内部审计工作获取审计证据？')]: 'useInternalAudit',
 };
 const BULK_IMPORT_EXCEL_EMPTY_PRIMARY_ROW_LIMIT = 20;
 
@@ -412,6 +436,87 @@ const getBulkImportCellRowsFromWorksheet = (worksheet: XLSX.WorkSheet): string[]
   }
 
   return rows.filter((cells) => cells.some(Boolean));
+};
+
+const getTemplateImportValue = (headerId: string, rawValue: string) => {
+  const value = rawValue.replace(/[\r\n\t]+/g, ' ').trim();
+  if (!value || /^(?:从下拉菜单选择|根据.+自动选择|来自于.+矩阵|XXXX|[-—])$/.test(value)) {
+    return '';
+  }
+  if (['selectedAsSample', 'thirdPartyStorage', 'useExpert', 'confirmThirdPartyInventory', 'useExperts', 'useInternalAudit', 'plannedAttendancePrimary', 'plannedAttendanceSecondary'].includes(headerId)) {
+    if (/^是\s*(?:Yes)?$/i.test(value)) return '是';
+    if (/^否\s*(?:No)?$/i.test(value)) return '否';
+  }
+  if (headerId === 'systemType') {
+    if (value.includes('永续盘存系统')) return '永续盘存系统';
+    if (value.includes('定期盘存系统')) return '定期盘存系统';
+  }
+  if (headerId === 'countMethod') {
+    if (value.includes('在期末完成盘点')) return '在期末完成盘点';
+    if (value.includes('在非期末时点完成盘点')) return '在非期末时点完成盘点';
+    if (value.includes('循环盘点')) return '循环盘点';
+  }
+  if (headerId === 'monitorMode') {
+    if (value.includes('现场监盘')) return '现场监盘';
+    if (value.includes('远程监盘')) return '远程监盘';
+  }
+  return value;
+};
+
+const readTwoSheetInventoryTemplate = (workbook: XLSX.WorkBook) => {
+  const headerLookup = new Map<string, LocationBulkImportHeaderId>(
+    BULK_IMPORT_HEADER_ITEMS.map((item) => [normalizeBulkImportHeaderLabel(item.label), item.id])
+  );
+  Object.entries(BULK_IMPORT_HEADER_ALIASES).forEach(([label, id]) => {
+    if (BULK_IMPORT_HEADER_ITEMS.some((item) => item.id === id)) {
+      headerLookup.set(label, id as LocationBulkImportHeaderId);
+    }
+  });
+
+  const sheets = workbook.SheetNames.map((sheetName) => {
+    const worksheet = workbook.Sheets[sheetName];
+    if (!worksheet?.['!ref']) return null;
+    const range = XLSX.utils.decode_range(worksheet['!ref']);
+    for (let rowIndex = range.s.r; rowIndex <= Math.min(range.e.r, range.s.r + 9); rowIndex += 1) {
+      const headers = Array.from({ length: Math.min(range.e.c + 1, 40) }, (_, columnIndex) =>
+        headerLookup.get(normalizeBulkImportHeaderLabel(getBulkImportWorksheetCellText(worksheet, rowIndex, columnIndex)))
+      );
+      if (headers.includes('companyName') && headers.includes('intervieweeName') && headers.filter(Boolean).length >= 4) {
+        return { worksheet, range, headerRowIndex: rowIndex, headers };
+      }
+    }
+    return null;
+  }).filter((sheet): sheet is NonNullable<typeof sheet> => sheet !== null);
+
+  if (sheets.length === 0) return null;
+
+  const records = new Map<string, BulkImportParsedRow>();
+  const visibleHeaderIds = new Set<string>(['index', 'companyName', 'intervieweeName']);
+  for (const sheet of sheets) {
+    const occurrenceCounts = new Map<string, number>();
+    sheet.headers.forEach((id) => { if (id) visibleHeaderIds.add(id); });
+    for (let rowIndex = sheet.headerRowIndex + 1; rowIndex <= sheet.range.e.r; rowIndex += 1) {
+      const values = sheet.headers.reduce<BulkImportParsedRow>((record, id, columnIndex) => {
+        if (id && id !== 'index') {
+          const value = getTemplateImportValue(id, getBulkImportWorksheetCellText(sheet.worksheet, rowIndex, columnIndex));
+          if (value) record[id] = value;
+        }
+        return record;
+      }, {});
+      const company = values.companyName ?? '';
+      const interviewee = values.intervieweeName ?? '';
+      if ((!company && !interviewee) || /^(?:\[?示例|XXXX|来自于)/i.test(company) || /^(?:XXXX|来自于)/i.test(interviewee)) continue;
+      const identity = `${company}\u0000${interviewee}`;
+      const occurrence = occurrenceCounts.get(identity) ?? 0;
+      occurrenceCounts.set(identity, occurrence + 1);
+      const key = `${identity}\u0000${occurrence}`;
+      records.set(key, { ...(records.get(key) ?? {}), ...values });
+    }
+  }
+
+  const headers = BULK_IMPORT_HEADER_ITEMS.filter((item) => visibleHeaderIds.has(item.id));
+  const rows = Array.from(records.values()).map((record) => headers.map((header) => record[header.id] ?? ''));
+  return { headers, rows, sheetCount: sheets.length };
 };
 
 const normalizeBulkImportCellRows = (
@@ -632,6 +737,10 @@ const getBulkImportRowFromMethodPlanRow = (row: MethodPlanRow) => {
         return row.companyOwner;
       case 'category':
         return row.importedCategory ?? '';
+      case 'otherCharacteristics':
+        return row.importedOtherCharacteristics ?? '';
+      case 'sampleChangeReason':
+        return row.sampleChangeReason;
       case 'endingBalanceConfirmation':
         return (
           row.importedEndingBalanceConfirmation ??
@@ -657,10 +766,62 @@ const getBulkImportRowFromMethodPlanRow = (row: MethodPlanRow) => {
         return row.importedInterimPlannedBalance ?? '';
       case 'selectedAsSample':
         return row.selectedAsSample;
+      case 'auditApproach':
+        return row.auditApproach === SELECT_PLACEHOLDER ? '' : row.auditApproach;
+      case 'sampleQuantity':
+        return row.sampleQuantity;
+      case 'plannedAttendancePrimary':
+        return row.importedPlannedAttendancePrimary ?? '';
+      case 'plannedAttendanceSecondary':
+        return row.importedPlannedAttendanceSecondary ?? '';
+      case 'confirmThirdPartyInventory':
+        return row.confirmThirdPartyInventory;
+      case 'monitorMode':
+        return row.monitorMode === SELECT_PLACEHOLDER ? '' : row.monitorMode;
+      case 'useExperts':
+        return row.useExperts;
+      case 'useInternalAudit':
+        return row.useInternalAudit;
       default:
         return '';
     }
   });
+};
+
+const createLocationDownloadWorkbook = (template: XLSX.WorkBook, rows: MethodPlanRow[]) => {
+  const workbook = XLSX.utils.book_new();
+  const lookup = new Map<string, LocationBulkImportHeaderId>(
+    BULK_IMPORT_HEADER_ITEMS.map((header) => [normalizeBulkImportHeaderLabel(header.label), header.id])
+  );
+  Object.entries(BULK_IMPORT_HEADER_ALIASES).forEach(([label, id]) => {
+    if (BULK_IMPORT_HEADER_ITEMS.some((header) => header.id === id)) lookup.set(label, id as LocationBulkImportHeaderId);
+  });
+  const records = rows.map((row) => Object.fromEntries(
+    BULK_IMPORT_HEADER_ITEMS.map((header, index) => [header.id, getBulkImportRowFromMethodPlanRow(row)[index]])
+  ));
+  template.SheetNames.slice(0, 2).forEach((name, sheetIndex) => {
+    const original = template.Sheets[name];
+    const headerRows = XLSX.utils.sheet_to_json<string[]>(original, { header: 1, defval: '' }).slice(0, 3);
+    const labels = [...headerRows[2]];
+    const fields = labels.map((label) => lookup.get(normalizeBulkImportHeaderLabel(String(label))));
+    const extraFields: LocationBulkImportHeaderId[] = sheetIndex === 0
+      ? ['otherCharacteristics', 'priorBalance', 'priorInterimPlannedBalance']
+      : ['sampleQuantity', 'sampleChangeReason'];
+    extraFields.forEach((id) => {
+      if (fields.includes(id)) return;
+      fields.push(id);
+      labels.push(BULK_IMPORT_HEADER_ITEMS.find((header) => header.id === id)!.label);
+    });
+    const data = records.map((record) => fields.map((id) => id ? record[id] ?? '' : ''));
+    const worksheet = XLSX.utils.aoa_to_sheet([
+      headerRows[0], headerRows[1], labels,
+      ...(data.length ? data : [fields.map(() => '')]),
+    ]);
+    worksheet['!cols'] = labels.map((_, index) => original['!cols']?.[index] ?? { wch: index < 3 ? 24 : 32 });
+    worksheet['!merges'] = original['!merges']?.filter((range) => range.e.r < 3);
+    XLSX.utils.book_append_sheet(workbook, worksheet, name);
+  });
+  return workbook;
 };
 
 const getBulkImportRowFromMethodPlanFullRow = (row: MethodPlanRow) =>
@@ -761,7 +922,7 @@ function SelectCell({
       >
         {options.map((option) => (
           <option key={option} value={option}>
-            {option}
+            {option || '-'}
           </option>
         ))}
       </select>
@@ -941,6 +1102,7 @@ const MethodPlanMatrix = forwardRef<MethodPlanMatrixHandle, MethodPlanMatrixProp
   function MethodPlanMatrix(
     {
       rows: controlledRows,
+      locationExportRows,
       onRowsChange,
       onBulkImportRows,
       showBulkImportButton = true,
@@ -978,11 +1140,9 @@ const MethodPlanMatrix = forwardRef<MethodPlanMatrixHandle, MethodPlanMatrixProp
     );
     const [lockedBulkImportHeaderIds, setLockedBulkImportHeaderIds] = useState<string[]>([]);
     const [recentlyAddedRowIds, setRecentlyAddedRowIds] = useState<string[]>([]);
-    const [invalidBulkImportHeaderIds, setInvalidBulkImportHeaderIds] = useState<string[]>([]);
     const bulkImportFocusInputRef = useRef<HTMLInputElement>(null);
     const bulkImportSheetContainerRef = useRef<HTMLDivElement>(null);
     const bulkImportExcelInputRef = useRef<HTMLInputElement>(null);
-    const bulkImportValidationTimeoutRef = useRef<number | null>(null);
     const rows = controlledRows ?? uncontrolledRows;
     const isControlled = controlledRows !== undefined;
 
@@ -1005,22 +1165,6 @@ const MethodPlanMatrix = forwardRef<MethodPlanMatrixHandle, MethodPlanMatrixProp
 
     const isBulkImportHeaderLocked = (headerId: string) =>
       bulkImportMode === 'locations' && lockedBulkImportHeaderIds.includes(headerId);
-    const isLocationBulkImportHeaderRequired = (headerId: string) =>
-      LOCATION_BULK_IMPORT_REQUIRED_HEADER_IDS.some((id) => id === headerId);
-
-    const showBulkImportValidation = (headerIds: string[]) => {
-      setInvalidBulkImportHeaderIds(headerIds);
-
-      if (bulkImportValidationTimeoutRef.current !== null) {
-        window.clearTimeout(bulkImportValidationTimeoutRef.current);
-      }
-
-      bulkImportValidationTimeoutRef.current = window.setTimeout(() => {
-        setInvalidBulkImportHeaderIds([]);
-        bulkImportValidationTimeoutRef.current = null;
-      }, 10_000);
-    };
-
     const homogeneousLocationRows = rows
       .map((row, index) => ({
         id: row.id,
@@ -1137,7 +1281,6 @@ const MethodPlanMatrix = forwardRef<MethodPlanMatrixHandle, MethodPlanMatrixProp
       setBulkImportValue('');
       setBulkImportUploadError('');
       setBulkImportUploadStatus('');
-      setInvalidBulkImportHeaderIds([]);
     };
 
     const confirmBulkImport = () => {
@@ -1146,17 +1289,6 @@ const MethodPlanMatrix = forwardRef<MethodPlanMatrixHandle, MethodPlanMatrixProp
       if (parsedRows.length === 0) {
         closeBulkImportModal();
         return;
-      }
-
-      if (bulkImportMode === 'locations') {
-        const missingHeaderIds = LOCATION_BULK_IMPORT_REQUIRED_HEADER_IDS.filter((headerId) =>
-          parsedRows.some((record) => !record[headerId]?.trim())
-        );
-
-        if (missingHeaderIds.length > 0) {
-          showBulkImportValidation(missingHeaderIds);
-          return;
-        }
       }
 
       if (bulkImportMode === 'methodPlan') {
@@ -1169,12 +1301,12 @@ const MethodPlanMatrix = forwardRef<MethodPlanMatrixHandle, MethodPlanMatrixProp
             district: record.district ?? '',
             address: record.address ?? '',
             sampleQuantity: record.sampleQuantity ?? '',
-            confirmThirdPartyInventory: record.confirmThirdPartyInventory ?? '否',
+            confirmThirdPartyInventory: record.confirmThirdPartyInventory ?? '',
             countMethod: record.countMethod ?? SELECT_PLACEHOLDER,
             auditApproach: record.auditApproach ?? SELECT_PLACEHOLDER,
             monitorMode: record.monitorMode ?? SELECT_PLACEHOLDER,
-            useExperts: record.useExperts ?? '否',
-            useInternalAudit: record.useInternalAudit ?? '否',
+            useExperts: record.useExperts ?? '',
+            useInternalAudit: record.useInternalAudit ?? '',
           })
         );
 
@@ -1197,9 +1329,10 @@ const MethodPlanMatrix = forwardRef<MethodPlanMatrixHandle, MethodPlanMatrixProp
           companyName: record.companyName ?? '',
           companyOwner: record.intervieweeName ?? record.companyOwner ?? '',
           importedCategory: record.category,
+          importedOtherCharacteristics: record.otherCharacteristics,
           importedEndingBalanceConfirmation: record.endingBalanceConfirmation,
           importedInventoryCountPlan: record.inventoryCountPlan,
-          countMethod: derivedCountMethod || record.countMethod || '在期末完成盘点',
+          countMethod: derivedCountMethod || record.countMethod || SELECT_PLACEHOLDER,
           importedSystemType: derivedSystemType || record.systemType || '',
           importedThirdPartyStorage: record.thirdPartyStorage ?? '',
           importedUseExpert: record.useExpert ?? '',
@@ -1207,7 +1340,16 @@ const MethodPlanMatrix = forwardRef<MethodPlanMatrixHandle, MethodPlanMatrixProp
           importedFinalBalance: record.finalBalance,
           importedPriorInterimPlannedBalance: record.priorInterimPlannedBalance,
           importedInterimPlannedBalance: record.interimPlannedBalance,
-          selectedAsSample: record.selectedAsSample ?? '否',
+          selectedAsSample: record.selectedAsSample ?? '',
+          sampleChangeReason: record.sampleChangeReason ?? '',
+          importedPlannedAttendancePrimary: record.plannedAttendancePrimary,
+          importedPlannedAttendanceSecondary: record.plannedAttendanceSecondary,
+          auditApproach: record.auditApproach ?? SELECT_PLACEHOLDER,
+          sampleQuantity: record.sampleQuantity ?? '',
+          confirmThirdPartyInventory: record.confirmThirdPartyInventory ?? '',
+          monitorMode: record.monitorMode ?? SELECT_PLACEHOLDER,
+          useExperts: record.useExperts ?? '',
+          useInternalAudit: record.useInternalAudit ?? '',
         });
       });
 
@@ -1253,15 +1395,6 @@ const MethodPlanMatrix = forwardRef<MethodPlanMatrixHandle, MethodPlanMatrixProp
         );
       }
     }, [bulkImportMode, isBulkImportOpen]);
-
-    useEffect(
-      () => () => {
-        if (bulkImportValidationTimeoutRef.current !== null) {
-          window.clearTimeout(bulkImportValidationTimeoutRef.current);
-        }
-      },
-      []
-    );
 
     useEffect(() => {
       if (!isBulkImportOpen) {
@@ -1374,13 +1507,27 @@ const MethodPlanMatrix = forwardRef<MethodPlanMatrixHandle, MethodPlanMatrixProp
       setMethodPlanPage((currentPage) => Math.min(currentPage, nextTotalPages));
     }, [filteredMethodPlanRows.length]);
 
-    const downloadBulkImportWorkbook = () => {
+    const downloadBulkImportWorkbook = async (blank = false) => {
+      if (bulkImportMode === 'locations') {
+        setBulkImportUploadError('');
+        try {
+          const response = await fetch('/templates/inventory-work-paper-template.xlsx');
+          if (!response.ok) throw new Error('模板读取失败');
+          const template = XLSX.read(await response.arrayBuffer(), { type: 'array' });
+          const workbook = createLocationDownloadWorkbook(template, blank ? [] : locationExportRows ?? rows);
+          XLSX.writeFile(workbook, blank ? '存货了解矩阵-空白模板.xlsx' : '存货了解矩阵-当前列表.xlsx');
+        } catch {
+          setBulkImportUploadError('下载失败，请重试。');
+        }
+        return;
+      }
+
       const headerLabels = activeBulkImportHeaders.map((header) => header.label);
       const dataRows = getBulkImportSheetRows(bulkImportValue, activeBulkImportHeaders);
       const worksheet = XLSX.utils.aoa_to_sheet([headerLabels, ...dataRows]);
       const workbook = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(workbook, worksheet, 'Sheet1');
-      XLSX.writeFile(workbook, bulkImportMode === 'methodPlan' ? '表格二监盘计划.xlsx' : '盘点表.xlsx');
+      XLSX.writeFile(workbook, '表格二监盘计划.xlsx');
     };
 
     const handleBulkImportExcelUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -1409,6 +1556,14 @@ const MethodPlanMatrix = forwardRef<MethodPlanMatrixHandle, MethodPlanMatrixProp
         }
 
         const worksheet = workbook.Sheets[firstSheetName];
+        const templateImport = bulkImportMode === 'locations' ? readTwoSheetInventoryTemplate(workbook) : null;
+        if (templateImport) {
+          setActiveBulkImportHeaderIds(templateImport.headers.map((header) => header.id));
+          setBulkImportValue(serializeBulkImportSheetRows(templateImport.rows));
+          setBulkImportUploadStatus(`已读取 ${templateImport.sheetCount} 个工作表，${templateImport.rows.length} 行可导入数据`);
+          setBulkImportUploadError('');
+          return;
+        }
         const mappedRows = synchronizeLocationDerivedFields(
           normalizeBulkImportCellRows(
             getBulkImportCellRowsFromWorksheet(worksheet),
@@ -1556,7 +1711,7 @@ const MethodPlanMatrix = forwardRef<MethodPlanMatrixHandle, MethodPlanMatrixProp
                 </span>
               </th>
               <th className={`${whiteHeaderCell} whitespace-nowrap`}>
-                <span className="inline-block text-left">样本数量</span>
+                <span className="inline-block text-left">抽盘数量</span>
               </th>
               <th className={whiteHeaderCell}>
                 <span className="inline-block text-left">
@@ -1581,7 +1736,7 @@ const MethodPlanMatrix = forwardRef<MethodPlanMatrixHandle, MethodPlanMatrixProp
                 </span>
               </th>
               {/* <th className={headerGreen}>是否被毕马威选为监盘样本</th> */}
-              {/* <th className={headerGreen}>样本数量</th> */}
+              {/* <th className={headerGreen}>抽盘数量</th> */}
               <th className={whiteHeaderCell}>
                 <span className="inline-block text-left">
                   <span className="inline-flex items-center whitespace-nowrap">
@@ -1903,7 +2058,7 @@ const MethodPlanMatrix = forwardRef<MethodPlanMatrixHandle, MethodPlanMatrixProp
                   <div className="text-sm font-semibold text-slate-800">确认监盘计划</div>
                   <div className="mt-3 grid gap-3">
                     <label className="block">
-                      <span className="text-xs font-medium leading-5 text-slate-600">样本数量</span>
+                      <span className="text-xs font-medium leading-5 text-slate-600">抽盘数量</span>
                       <input
                         type="text"
                         value={homogeneousSampleQuantity}
@@ -2004,7 +2159,9 @@ const MethodPlanMatrix = forwardRef<MethodPlanMatrixHandle, MethodPlanMatrixProp
                 <div>
                   <h3 className="text-2xl font-bold text-gray-900">批量导入地点</h3>
                   <p className="mt-1 text-sm text-gray-500">
-                    每行输入一个详细地址，系统会按当前表格结构自动创建新行。
+                    {bulkImportMode === 'locations'
+                      ? '上传下载模板中的两个工作表；这里只显示可对应的字段，其他列不影响导入。'
+                      : '上传 Excel 或直接编辑下方表格，确认后更新监盘计划。'}
                   </p>
                 </div>
                 <button
@@ -2027,20 +2184,12 @@ const MethodPlanMatrix = forwardRef<MethodPlanMatrixHandle, MethodPlanMatrixProp
                           className="px-2 py-2"
                         >
                           <div
-                            className={`flex min-h-[34px] items-start justify-between gap-1 text-[11px] font-medium leading-snug ${
-                              invalidBulkImportHeaderIds.includes(item.id)
-                                ? 'animate-pulse text-red-500'
-                                : 'text-slate-700'
-                            }`}
+                            className="flex min-h-[34px] items-start justify-between gap-1 text-[11px] font-medium leading-snug text-slate-700"
                           >
                             <span className="break-words">
                               {item.label}
-                              {bulkImportMode === 'locations' && isLocationBulkImportHeaderRequired(item.id) ? (
-                                <span className="ml-0.5 text-red-500">*</span>
-                              ) : null}
                             </span>
-                            {!item.fixed &&
-                              !(bulkImportMode === 'locations' && isLocationBulkImportHeaderRequired(item.id)) && (
+                            {!item.fixed && !isBulkImportHeaderLocked(item.id) && (
                               <button
                                 type="button"
                                 onClick={() => removeBulkImportHeader(item.id)}
@@ -2180,12 +2329,19 @@ const MethodPlanMatrix = forwardRef<MethodPlanMatrixHandle, MethodPlanMatrixProp
                     className="sr-only"
                     onChange={handleBulkImportExcelUpload}
                   />
+                  {bulkImportMode === 'locations' && <button
+                    type="button"
+                    onClick={() => void downloadBulkImportWorkbook(true)}
+                    className="rounded-xl border border-gray-200 bg-white px-6 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50"
+                  >
+                    下载空白模板
+                  </button>}
                   <button
                     type="button"
-                    onClick={downloadBulkImportWorkbook}
+                    onClick={() => void downloadBulkImportWorkbook()}
                     className="rounded-xl border border-[#143f97] bg-[#143f97] px-6 py-2.5 text-sm font-medium text-white shadow-sm transition hover:border-[#0f2f73] hover:bg-[#0f2f73]"
                   >
-                    {bulkImportMode === 'methodPlan' ? '下载当前数据' : '下载模板'}
+                    {bulkImportMode === 'methodPlan' ? '下载当前数据' : '下载当前列表'}
                   </button>
                   <button
                     type="button"

@@ -53,7 +53,7 @@ const defaultColumnLabels = [
   '存货所在地点实施监盘',
   '客户是否开展盘点',
   '计划的审计方案',
-  '样本数量',
+  '抽盘数量',
 ];
 let previousDefaultColumnIndex = unifiedTableSource.indexOf('{matrixView === null && <>');
 for (const label of defaultColumnLabels) {
@@ -189,7 +189,7 @@ const defaultHeaderSource = unifiedTableSource.slice(
 );
 assert.doesNotMatch(defaultHeaderSource, /发出函证/);
 assert.match(inventoryMatrix, /const isAllColumnsView = matrixView === 'all'/);
-assert.match(inventoryMatrix, /isAllColumnsView \? 22/);
+assert.match(inventoryMatrix, /isAllColumnsView \? 23/);
 assert.match(
   inventoryMatrix,
   /function CenteredLeftHeaderText[\s\S]*inline-block text-left[\s\S]*\{children\}/,
@@ -207,7 +207,7 @@ assert.equal(
 );
 assert.match(
   inventoryMatrix,
-  /const ALL_VIEW_TABLE_WIDTH = 2811;/,
+  /const ALL_VIEW_TABLE_WIDTH = 2947;/,
   'all-columns table width should include the widened selectable current-balance column'
 );
 assert.match(
@@ -225,7 +225,7 @@ assert.match(
   /\(matrixView === 'balance' \|\| isAllColumnsView\) && <><col style=\{\{ width: '101px' \}\}/,
   'balance and all-columns views should widen the selectable current-balance column by 15 percent'
 );
-assert.doesNotMatch(unifiedTableSource, /计划引入专家<br \/>和\/或特定项目组成员/);
+assert.match(unifiedTableSource, /计划引入专家<br \/>和\/或特定项目组成员/);
 assert.match(inventoryMatrix, /function CircularSelectionCheckbox/);
 assert.match(inventoryMatrix, /ariaLabel="全选当前筛选结果"/);
 assert.match(inventoryMatrix, /aria-label="筛选是否选为盘点对象"/);
@@ -270,7 +270,7 @@ assert.match(inventoryMatrix, /isBulkEditLocationsExpanded/);
 assert.match(inventoryMatrix, /setIsBulkEditLocationsExpanded\(false\)/);
 assert.doesNotMatch(inventoryMatrix, /max-h-32 divide-y divide-slate-100 overflow-y-auto/);
 assert.match(inventoryMatrix, /config\.side === side/);
-assert.match(inventoryMatrix, /placeholder="请输入样本数量"/);
+assert.match(inventoryMatrix, /placeholder="请输入抽盘数量"/);
 assert.match(inventoryMatrix, /label: '存货盘存系统'/);
 assert.match(inventoryMatrix, /label: '存货盘点方法'/);
 assert.doesNotMatch(inventoryMatrix, /关联的第三方地点取证/);
@@ -432,7 +432,7 @@ for (const bulkEditLabel of [
   '存货所在地址是否可实施监盘',
   '项目组前往当日，客户是否开展盘点',
   '项目组就监盘而计划的审计方案',
-  '样本数量',
+  '抽盘数量',
 ]) {
   assert.ok(inventoryMatrix.includes(`label: '${bulkEditLabel}'`), `missing bulk edit field: ${bulkEditLabel}`);
 }

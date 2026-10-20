@@ -1,4 +1,4 @@
-﻿import assert from 'node:assert/strict';
+import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
 const preWpJuly = readFileSync(new URL('../components/PreWpJuly.tsx', import.meta.url), 'utf8');
@@ -126,7 +126,7 @@ assert.doesNotMatch(
 
 assert.match(
   renderedMethodPlanMatrixJuly,
-  /本期期末余额（百万元）[\s\S]*本期预审阶段余额（百万元）[\s\S]*>样本数量<\/th>[\s\S]*formatMethodPlanWebAmount\(row\.importedFinalBalance\)[\s\S]*formatMethodPlanWebAmount\(row\.importedInterimPlannedBalance\)[\s\S]*value=\{row\.sampleQuantity\}/,
+  /本期期末余额（百万元）[\s\S]*本期预审阶段余额（百万元）[\s\S]*>抽盘数量<\/th>[\s\S]*formatMethodPlanWebAmount\(row\.importedFinalBalance\)[\s\S]*formatMethodPlanWebAmount\(row\.importedInterimPlannedBalance\)[\s\S]*value=\{row\.sampleQuantity\}/,
   'method plan table should replace visible address columns with the two scaled balance columns before sample quantity'
 );
 
@@ -288,7 +288,7 @@ assert.match(
 
 assert.match(
   methodPlanMatrixJuly,
-  /bulkImportMode\?: 'locations' \| 'methodPlan';[\s\S]*const METHOD_PLAN_IMPORT_HEADER_ITEMS[\s\S]*所属公司名称[\s\S]*受访单位名称[\s\S]*地点详细地址[\s\S]*样本数量[\s\S]*向第三方函证存货的数量和状况[\s\S]*毕马威就监盘而计划的审计方案[\s\S]*项目组是否计划利用内部审计工作获取审计证据[\s\S]*bulkImportMode = 'methodPlan'/,
+  /bulkImportMode\?: 'locations' \| 'methodPlan';[\s\S]*const METHOD_PLAN_IMPORT_HEADER_ITEMS[\s\S]*所属公司名称[\s\S]*受访单位名称[\s\S]*地点详细地址[\s\S]*抽盘数量[\s\S]*向第三方函证存货的数量和状况[\s\S]*毕马威就监盘而计划的审计方案[\s\S]*项目组是否计划利用内部审计工作获取审计证据[\s\S]*bulkImportMode = 'methodPlan'/,
   'method plan matrix should support a full table-two import mode with all visible table-two headers'
 );
 
@@ -336,7 +336,7 @@ assert.match(
 
 assert.match(
   methodPlanMatrixJuly,
-  /const \[homogeneousSampleQuantity, setHomogeneousSampleQuantity\] = useState\(''\);[\s\S]*nextRow\.sampleQuantity = homogeneousSampleQuantity[\s\S]*确认监盘计划[\s\S]*>样本数量<\/span>[\s\S]*value=\{homogeneousSampleQuantity\}[\s\S]*setHomogeneousSampleQuantity/,
+  /const \[homogeneousSampleQuantity, setHomogeneousSampleQuantity\] = useState\(''\);[\s\S]*nextRow\.sampleQuantity = homogeneousSampleQuantity[\s\S]*确认监盘计划[\s\S]*>抽盘数量<\/span>[\s\S]*value=\{homogeneousSampleQuantity\}[\s\S]*setHomogeneousSampleQuantity/,
   'confirmation popup should provide sample quantity on the left and apply it to selected rows'
 );
 
