@@ -199,7 +199,7 @@ function InventoryNatureQuestions({ answers, setAnswers, group = 'general' }: {
       type="button"
       onClick={() => openPreview(pages)}
       aria-label={`预览指导文件第 ${pageLabel(pages)} 页`}
-      className="ml-1 inline-block align-baseline rounded-md border border-slate-400 px-2 text-sm font-medium leading-5 text-[#2c547d] transition hover:bg-sky-100 hover:text-cyan-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#00338D]"
+      className="ml-1 inline-block align-baseline rounded-md border border-slate-400 px-2 text-sm font-medium leading-5 text-[#2c547d] transition hover:bg-sky-100 hover:text-lime-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#00338D]"
     >
       指导文件
     </button>
@@ -1272,6 +1272,7 @@ export default function PreWpJuly({ onBack, taskId, menuOpen = false, showCompac
   const [isPlanSetupCollapsed, setIsPlanSetupCollapsed] = useState(false);
   const [hasConfirmedKoicPush, setHasConfirmedKoicPush] = useState(savedDraft?.hasConfirmedKoicPush ?? false);
   const [showPrepAfterTask, setShowPrepAfterTask] = useState(false);
+  const [isInventoryCountInfoCollapsed, setIsInventoryCountInfoCollapsed] = useState(false);
   const [publishedMethodPlanRows, setPublishedMethodPlanRows] = useState<MethodPlanRow[]>(savedDraft?.publishedMethodPlanRows ?? []);
   const currentDraft: JulyDraft = {
     attachmentCompletion, language, inventoryPolicyFileName, inventoryQualityFileName, methodFileName,
@@ -1403,7 +1404,7 @@ export default function PreWpJuly({ onBack, taskId, menuOpen = false, showCompac
     {
       id: 9,
       displayNumber: 8,
-      procedure: '记录项目组在计划阶段，观察到的其他事项',
+      procedure: '记录项目组在计划阶段，观察到的其他事项。',
       kaeg: [],
       workflow: [],
     },
@@ -2202,6 +2203,7 @@ export default function PreWpJuly({ onBack, taskId, menuOpen = false, showCompac
                     </td>
                   </tr>
                   {!isMethodPlanPrepCollapsed && visibleMethodPlanPrepSteps.map((step) => {
+                    if (showOverview && isInventoryCountInfoCollapsed && (step.displayNumber ?? 0) >= 3) return null;
                     return (
                       <React.Fragment key={`method-plan-prep-${step.id}`}>
                         <tr className="transition-colors hover:bg-gray-50">
@@ -2209,7 +2211,7 @@ export default function PreWpJuly({ onBack, taskId, menuOpen = false, showCompac
                             <div className="flex items-start justify-center">
                               {(!showOverview || step.id !== 1) && <div
                                 className="mt-1.5 h-2.5 w-2.5 rounded-full transition-colors"
-                                style={{ backgroundColor: hasStepInputContent(step.id) ? '#0D92F8' : '#D1D5DB' }}
+                                style={{ backgroundColor: hasStepInputContent(step.id) ? '#2691e2' : '#D1D5DB' }}
                               />}
                             </div>
                           </td>
@@ -2445,10 +2447,22 @@ export default function PreWpJuly({ onBack, taskId, menuOpen = false, showCompac
                           <tr className="bg-white" style={{ borderTopWidth: 0 }}>
                             <td className="px-2 pb-6 align-top" />
                             <td className="px-3 pb-6 align-top">
-                              <h3 className={cn('mb-5 pt-5', INVENTORY_CONSIDERATION_HEADING_CLASS_NAME)}>
-                                根据了解到的被审计单位存货盘点信息，获悉项目组在设计或执行程序时应考虑的因素
+                              <h3 className={cn('mb-5 flex items-start gap-2 pt-5', INVENTORY_CONSIDERATION_HEADING_CLASS_NAME)}>
+                                <span>根据了解到的被审计单位存货盘点信息，获悉项目组在设计或执行程序时应考虑的因素</span>
+                                <button
+                                  type="button"
+                                  onClick={() => setIsInventoryCountInfoCollapsed((current) => !current)}
+                                  aria-label={isInventoryCountInfoCollapsed ? '展开存货盘点信息' : '收起存货盘点信息'}
+                                  aria-expanded={!isInventoryCountInfoCollapsed}
+                                  aria-controls="inventory-count-information-questions"
+                                  className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded text-slate-500 transition hover:bg-slate-100 hover:text-[#00338D] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#00338D]"
+                                >
+                                  {isInventoryCountInfoCollapsed ? <ChevronDown size={15} aria-hidden="true" /> : <ChevronUp size={15} aria-hidden="true" />}
+                                </button>
                               </h3>
-                              <InventoryNatureQuestions group="before-policy" answers={inventoryNatureAnswers} setAnswers={setInventoryNatureAnswers} />
+                              <div id="inventory-count-information-questions" hidden={isInventoryCountInfoCollapsed}>
+                                <InventoryNatureQuestions group="before-policy" answers={inventoryNatureAnswers} setAnswers={setInventoryNatureAnswers} />
+                              </div>
                             </td>
                           </tr>
                         )}
@@ -2595,7 +2609,7 @@ export default function PreWpJuly({ onBack, taskId, menuOpen = false, showCompac
                         <div className="flex items-start justify-center">
                           <div
                             className="mt-1.5 h-2.5 w-2.5 rounded-full transition-colors"
-                            style={{ backgroundColor: '#0D92F8' }}
+                            style={{ backgroundColor: '#2691e2' }}
                           />
                         </div>
                       </td>

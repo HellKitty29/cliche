@@ -1438,7 +1438,7 @@ export default function InventoryMatrix({
                   setInventorySearchTerm(event.target.value);
                   setInventoryPage(1);
                 }}
-                placeholder="搜索所属公司名称、受访单位名称、类别"
+                placeholder="搜索所属公司名称、受访单位名称、存货类别"
                 className="h-7 w-full rounded border border-slate-200 bg-white py-1 pl-7 pr-2 text-[11px] text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-[#143f97] focus:ring-1 focus:ring-[#143f97]/20"
               />
             </label>
@@ -1534,7 +1534,7 @@ export default function InventoryMatrix({
                 </th>
                 <th className={`${headerCellClassName} ${stickyIdentityHeaderClassName}`} style={{ left: identityColumnLefts[1] }}><CenteredLeftHeaderText>所属公司名称</CenteredLeftHeaderText></th>
                 <th className={`${headerCellClassName} ${stickyIdentityHeaderClassName}`} style={{ left: identityColumnLefts[2] }}><CenteredLeftHeaderText>受访单位名称<InventoryInlineInfoButton ariaLabel="受访单位名称说明" label={INVENTORY_HEADER_HINTS.interviewee} /></CenteredLeftHeaderText></th>
-                <th ref={categoryHeaderRef} className={`${headerCellClassName} ${stickyIdentityHeaderClassName}`} style={{ left: identityColumnLefts[3] }}><CenteredLeftHeaderText>{matrixView === null ? '类别' : '存货类别'}<InventoryInlineInfoButton ariaLabel="存货类别说明" label={INVENTORY_HEADER_HINTS.category} /></CenteredLeftHeaderText></th>
+                <th ref={categoryHeaderRef} className={`${headerCellClassName} ${stickyIdentityHeaderClassName}`} style={{ left: identityColumnLefts[3] }}><CenteredLeftHeaderText>存货类别<InventoryInlineInfoButton ariaLabel="存货类别说明" label={INVENTORY_HEADER_HINTS.category} /></CenteredLeftHeaderText></th>
                 <th className={`${headerCellClassName} ${stickyIdentityHeaderClassName}`} style={{ left: identityColumnLefts[4] }}><CenteredLeftHeaderText>存货其他特征</CenteredLeftHeaderText></th>
                 <th className={`${greenHeaderCellClassName} ${stickyIdentityHeaderClassName} ${hasStickyCurrentAmount ? '' : stickyIdentityBoundaryClassName}`} style={{ left: identityColumnLefts[5] }}>
                   <div className="flex flex-col items-center justify-center gap-0.5 text-center">
@@ -1762,7 +1762,7 @@ export default function InventoryMatrix({
                 </th>
                 <th ref={categoryHeaderRef} className={headerCellClassName}>
                   <span className="inline-flex items-center justify-center gap-1">
-                    类别{noteLabel(2)}
+                    存货类别{noteLabel(2)}
                     <button
                       type="button"
                       onMouseEnter={() => setIsCategoryTooltipVisible(true)}
